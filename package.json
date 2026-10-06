@@ -1,0 +1,30 @@
+{
+  "name": "gmai",
+  "version": "1.0.0",
+  "description": "GameMind AI Swarm Cadence 3:1 Continuous Liquidity Controller",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dashboard": "node controller_server.js",
+    "bot": "node .\\scripts\\loop_3buy_1sell_continuous.js",
+    "bot:live": "node .\\scripts\\loop_3buy_1sell_continuous.js --trade-size=0.1 --refund-ratio=0.70 --rounds=0 --delay=30 --wallet-delay=30 --execute",
+    "bot:dry": "node .\\scripts\\loop_3buy_1sell_continuous.js --trade-size=0.1 --refund-ratio=0.70 --rounds=0 --delay=30 --wallet-delay=30",
+    "arb": "node .\\scripts\\arbitrage_gmai_lp.js",
+    "arb:dry": "node .\\scripts\\arbitrage_gmai_lp.js --rounds=1",
+    "arb:live": "node .\\scripts\\arbitrage_gmai_lp.js --continuous --execute"
+  },
+  "keywords": [
+    "sidra",
+    "gmai",
+    "liquidity-bot",
+    "uniswap-v3",
+    "swarm-cadence"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^18.0.5",
+    "ethers": "^6.17.0"
+  }
+}

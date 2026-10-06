@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GameMind AI ($GMAI) — Swarm Cadence Mission Control</title>
+  <meta name="description" content="Autonomous 5-Wallet Continuous Swarm Cadence Controller on Sidra Chain. 3-Buy 1-Sell automated liquidity loop for GMAI token.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient background glow elements -->
+  <div class="ambient-glow glow-gold"></div>
+  <div class="ambient-glow glow-cyan"></div>
+  <div class="ambient-glow glow-magenta"></div>
+
+  <!-- Header Navigation -->
+  <header class="navbar">
+    <div class="nav-brand">
+      <div class="brand-avatar">
+        <span class="brand-icon">⚡</span>
+      </div>
+      <div class="brand-titles">
+        <h1 class="brand-title">SWARM CADENCE <span class="gold-text">MISSION CONTROL</span></h1>
+        <p class="brand-sub">GameMind AI ($GMAI) · Continuous 3-Buy 1-Sell Autonomous Fleet</p>
+      </div>
+    </div>
+
+    <div class="nav-controls">
+      <!-- Chain Badge -->
+      <div class="status-pill chain-pill">
+        <span class="led-dot led-green"></span>
+        <span>Sidra Chain (97453)</span>
+      </div>
+
+      <!-- Engine Status Pill -->
+      <div class="status-pill status-engine" id="engineStatusPill">
+        <span class="led-dot led-gray" id="engineStatusLed"></span>
+        <span id="engineStatusText">IDLE / STOPPED</span>
+      </div>
+
+      <!-- Execution Mode Pill -->
+      <div class="status-pill mode-pill mode-dry" id="modePill">
+        <span class="mode-icon" id="modeIcon">🛡️</span>
+        <span id="modeText">DRY-RUN SIMULATION</span>
+      </div>
+
+      <!-- Preset Quick Button -->
+      <button id="btnLoadPreset" class="btn btn-preset" title="Load exact flag parameters: 0.1 trade size, 0.70 refund, 30s delays, rounds=0 (infinite), execute=true">
+        <span>⚡ Quick Preset (0.1 SDA / 70% Refund / 30s Delays / Live)</span>
+      </button>
+
+      <!-- Emergency Stop Button -->
+      <button id="btnEmergencyStop" class="btn btn-danger" title="Instantly force abort all active loops and transactions">
+        <span class="stop-icon">🛑</span>
+        <span>EMERGENCY STOP</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Layout -->
+  <main class="dashboard">
+
+    <!-- Top Protocol Registry Bar -->
+    <section class="card protocol-bar">
+      <div class="protocol-item">
+        <span class="proto-label">TARGET ASSET</span>
+        <span class="proto-value gold-text" id="targetAssetDisplay">GMAI (GameMind AI)</span>
+        <span class="proto-sub font-mono" id="targetTokenAddrDisplay">0x4765...ca04</span>
+      </div>
+
+      <div class="protocol-separator"></div>
+
+      <div class="protocol-item">
+        <span class="proto-label">DEX POOL & FEE TIER</span>
+        <span class="proto-value" id="poolAddrDisplay">0x64F2...B6eA</span>
+        <span class="proto-sub">Uniswap V3 / PinetSwap (1.00% · Fee: 10000)</span>
+      </div>
+
+      <div class="protocol-separator"></div>
+
+      <div class="protocol-item">
+        <span class="proto-label">LIVE SPOT PRICE</span>
+        <span class="proto-value cyan-text" id="spotPriceDisplay">~1.2975 SDA</span>
+        <span class="proto-sub" id="inversePriceDisplay">1 SDA ≈ 0.7707 GMAI</span>
+      </div>
+
+      <div class="protocol-separator"></div>
+
+      <div class="protocol-item">
+        <span class="proto-label">ROUTER & WRAPPED FUEL</span>
+        <span class="proto-value font-mono">0x35cA...23fb</span>
+        <span class="proto-sub font-mono">WSDA: 0xE409...6182</span>
+      </div>
+
+      <div class="protocol-separator"></div>
+
+      <div class="protocol-item actions-item">
+        <button id="btnRefreshAll" class="btn btn-secondary btn-sm" title="Refresh on-chain wallet balances and pool price">
+          <span>🔄 Sync On-Chain</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Main Grid: Controls & Stats -->
+    <div class="grid-2col">
+
+      <!-- LEFT COLUMN: Parameter Engine & Controls -->
+      <div class="col-left">
+
+        <!-- Control Actions Panel -->
+        <section class="card control-actions-card">
+          <div class="card-header">
+            <h2 class="card-title">🎮 FLEET DISPATCH CONTROLS</h2>
+            <span class="badge" id="commandTargetBadge">CLI: loop_3buy_1sell_continuous.js</span>
+          </div>
+
+          <div class="action-buttons-group">
+            <button id="btnStart" class="btn btn-primary btn-large">
+              <span class="btn-icon">▶️</span>
+              <span class="btn-label">START CONTINUOUS LOOP</span>
+            </button>
+
+            <button id="btnStop" class="btn btn-warning btn-large" disabled>
+              <span class="btn-icon">⏸️</span>
+              <span class="btn-label">GRACEFUL PAUSE / STOP</span>
+            </button>
+
+            <button id="btnTriggerManual" class="btn btn-accent">
+              <span class="btn-icon">🎯</span>
+              <span class="btn-label">EXECUTE 1 ROUND NOW</span>
+            </button>
+          </div>
+
+          <div class="cli-command-preview">
+            <span class="cli-label">ACTIVE EQUIVALENT CLI COMMAND:</span>
+            <code id="cliCommandPreview">node .\scripts\loop_3buy_1sell_continuous.js --trade-size=0.1 --refund-ratio=0.70 --rounds=0 --delay=30 --wallet-delay=30 --execute</code>
+            <button id="btnCopyCli" class="btn-copy" title="Copy CLI command to clipboard">📋</button>
+          </div>
+        </section>
+
+        <!-- Parameters Configuration Form -->
+        <section class="card config-card">
+          <div class="card-header">
+            <h2 class="card-title">⚙️ SWARM EXECUTION PARAMETERS</h2>
+            <button id="btnApplyConfig" class="btn btn-secondary btn-xs">Apply Updates</button>
+          </div>
+
+          <form id="configForm" class="config-grid">
+
+            <!-- Execution Mode Switch -->
+            <div class="form-group full-width switch-group">
+              <label class="switch-container">
+                <input type="checkbox" id="inputIsLive">
+                <span class="switch-slider"></span>
+                <span class="switch-label">
+                  <strong>🚨 LIVE ON-CHAIN BROADCAST (--execute)</strong>
+                  <span class="switch-sub">When unchecked, executes in safe dry-run simulation mode without spending real gas.</span>
+                </span>
+              </label>
+            </div>
+
+            <!-- Trade Size -->
+            <div class="form-group">
+              <label for="inputTradeSize">Trade Size per Buy (SDA)</label>
+              <div class="input-with-unit">
+                <input type="number" id="inputTradeSize" step="0.01" min="0.001" max="100" value="0.1" required>
+                <span class="unit">SDA</span>
+              </div>
+              <span class="field-hint">e.g. 0.10 SDA per buy</span>
+            </div>
+
+            <!-- Refund Ratio -->
+            <div class="form-group">
+              <label for="inputRefundRatio">Sell Leg Refund Ratio</label>
+              <div class="input-with-unit">
+                <input type="number" id="inputRefundRatio" step="0.05" min="0.10" max="1.00" value="0.70" required>
+                <span class="unit" id="refundRatioPercent">70%</span>
+              </div>
+              <span class="field-hint">Target SDA recovery on 4th step</span>
+            </div>
+
+            <!-- Target Rounds -->
+            <div class="form-group">
+              <label for="inputRounds">Target Rounds (0 = Infinite)</label>
+              <input type="number" id="inputRounds" step="1" min="0" max="10000" value="0" required>
+              <span class="field-hint">0 = Continuous 24/7 Swarm</span>
+            </div>
+
+            <!-- Buys per Round -->
+            <div class="form-group">
+              <label for="inputBuys">Buy Cadence (Buys per Round)</label>
+              <input type="number" id="inputBuys" step="1" min="1" max="10" value="3" required>
+              <span class="field-hint">Standard 3:1 Cadence</span>
+            </div>
+
+            <!-- Step Delay -->
+            <div class="form-group">
+              <label for="inputDelay">Step Trade Delay (Seconds)</label>
+              <div class="input-with-unit">
+                <input type="number" id="inputDelay" step="5" min="1" max="600" value="30" required>
+                <span class="unit">sec</span>
+              </div>
+              <span class="field-hint">Wait 30s between buys & sells</span>
+            </div>
+
+            <!-- Inter-Wallet Delay -->
+            <div class="form-group">
+              <label for="inputWalletDelay">Inter-Wallet Delay (Seconds)</label>
+              <div class="input-with-unit">
+                <input type="number" id="inputWalletDelay" step="5" min="0" max="600" value="30" required>
+                <span class="unit">sec</span>
+              </div>
+              <span class="field-hint">Wait 30s between each wallet</span>
+            </div>
+
+            <!-- Round Interval -->
+            <div class="form-group">
+              <label for="inputInterval">Round Cooldown Interval (ms)</label>
+              <div class="input-with-unit">
+                <input type="number" id="inputInterval" step="5000" min="5000" max="600000" value="60000" required>
+                <span class="unit">ms</span>
+              </div>
+              <span class="field-hint">Wait between rounds (60s)</span>
+            </div>
+
+            <!-- Min Reserve -->
+            <div class="form-group">
+              <label for="inputMinReserve">Min Native SDA Buffer</label>
+              <div class="input-with-unit">
+                <input type="number" id="inputMinReserve" step="0.1" min="0.1" max="10" value="0.5" required>
+                <span class="unit">SDA</span>
+              </div>
+              <span class="field-hint">Safety gas threshold</span>
+            </div>
+
+            <!-- Slippage Tolerance -->
+            <div class="form-group">
+              <label for="inputSlippage">Max Slippage Tolerance (BPS)</label>
+              <div class="input-with-unit">
+                <input type="number" id="inputSlippage" step="10" min="10" max="1000" value="100" required>
+                <span class="unit">1.0%</span>
+              </div>
+              <span class="field-hint">100 BPS = 1.00% max slip</span>
+            </div>
+
+          </form>
+        </section>
+
+      </div>
+
+      <!-- RIGHT COLUMN: HUD Telemetry & PnL Recovery -->
+      <div class="col-right">
+
+        <!-- Swarm Telemetry HUD -->
+        <section class="card hud-card">
+          <div class="card-header">
+            <h2 class="card-title">📊 CAPITAL EFFICIENCY & RECOVERY HUD</h2>
+            <span class="badge badge-pulse" id="hudStatusBadge">READY</span>
+          </div>
+
+          <div class="stats-grid">
+
+            <div class="stat-box">
+              <span class="stat-label">CURRENT ROUND</span>
+              <span class="stat-number gold-text" id="statRoundDisplay">0</span>
+              <span class="stat-sub" id="statRoundSub">Continuous Infinite</span>
+            </div>
+
+            <div class="stat-box">
+              <span class="stat-label">TOTAL CADENCE ORDERS</span>
+              <span class="stat-number cyan-text" id="statOrdersDisplay">0 <small class="text-muted">/ 0</small></span>
+              <span class="stat-sub" id="statOrdersSub">Buys 🟢 / Sells 🔴</span>
+            </div>
+
+            <div class="stat-box">
+              <span class="stat-label">TOTAL SDA DEPLOYED</span>
+              <span class="stat-number" id="statSpentDisplay">0.0000 <small>SDA</small></span>
+              <span class="stat-sub">Gross Fuel Consumed</span>
+            </div>
+
+            <div class="stat-box">
+              <span class="stat-label">TOTAL SDA RECOVERED</span>
+              <span class="stat-number emerald-text" id="statRefundedDisplay">0.0000 <small>SDA</small></span>
+              <span class="stat-sub">Harvested via Sell Leg</span>
+            </div>
+
+            <div class="stat-box">
+              <span class="stat-label">NET CAPITAL RETAINED</span>
+              <span class="stat-number rose-text" id="statNetCostDisplay">0.0000 <small>SDA</small></span>
+              <span class="stat-sub">Net Accumulation In Token</span>
+            </div>
+
+            <div class="stat-box">
+              <span class="stat-label">FUEL RECOVERY RATE</span>
+              <span class="stat-number gold-text" id="statRecoveryRateDisplay">80.0%</span>
+              <span class="stat-sub">Target: 80% capital recycle</span>
+            </div>
+
+          </div>
+
+          <!-- Mathematical Round Breakdown Explainer -->
+          <div class="math-breakdown-box">
+            <div class="math-header">
+              <span class="math-icon">🧮</span>
+              <strong>Per-Round Mathematical Decomposition (Per Wallet):</strong>
+            </div>
+            <div class="math-body font-mono">
+              <div>• <strong>Spend:</strong> 3 Buys × <span id="mathBuySize">0.03</span> SDA = <span id="mathGrossSpend" class="gold-text">0.0900 SDA</span> gross fuel.</div>
+              <div>• <strong>Sell Harvest:</strong> <span id="mathGrossSpend2">0.0900 SDA</span> × <span id="mathRatio">80%</span> = <span id="mathRefund" class="emerald-text">0.0720 SDA</span> unwrapped back to native fuel.</div>
+              <div>• <strong>Net Retention:</strong> <span id="mathNet" class="rose-text">0.0180 SDA</span> worth of <span id="mathToken">GMAI</span> retained in wallet balance per round.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5-Wallet Fleet Status Grid -->
+        <section class="card fleet-card">
+          <div class="card-header">
+            <h2 class="card-title">🛡️ 5-WALLET SWARM FLEET BALANCES</h2>
+            <button id="btnRefreshWallets" class="btn btn-secondary btn-xs">Sync Balances</button>
+          </div>
+
+          <div class="wallets-grid" id="walletsContainer">
+            <div class="loading-placeholder">Connecting to Sidra Chain RPC to query wallet balances...</div>
+          </div>
+        </section>
+
+      </div>
+
+    </div>
+
+    <!-- 42-Token Cross-Pool Arbitrage & 40% GMAI Liquidity Accumulator -->
+    <section class="card arb-card">
+      <div class="card-header arb-header">
+        <div class="arb-title-group">
+          <span class="arb-icon">🌐</span>
+          <div>
+            <h2 class="card-title">42-TOKEN ARBITRAGE &amp; GMAI LIQUIDITY ACCUMULATOR</h2>
+            <p class="card-subtitle">Accumulate Native SDA · Automatically Route 40% of Net Profit to GMAI DEX Liquidity Pool</p>
+          </div>
+        </div>
+
+        <div class="arb-header-actions">
+          <div class="status-pill status-arb" id="arbStatusPill">
+            <span class="led-dot led-gray" id="arbStatusLed"></span>
+            <span id="arbStatusText">ARB IDLE</span>
+          </div>
+
+          <button id="btnArbScan" class="btn btn-secondary btn-sm" title="Scan all 42 tokens across 500, 3000, 10000 fee pools now">
+            <span>🔍 Scan 42 Tokens</span>
+          </button>
+
+          <button id="btnArbStart" class="btn btn-primary btn-sm">
+            <span>▶️ Start Arb Fleet</span>
+          </button>
+
+          <button id="btnArbStop" class="btn btn-warning btn-sm" disabled>
+            <span>⏸️ Stop Arb</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Arbitrage KPI Metrics Grid -->
+      <div class="arb-stats-grid">
+        <div class="stat-box">
+          <span class="stat-label">TOTAL NET PROFIT</span>
+          <span class="stat-number gold-text" id="arbTotalProfitDisplay">+0.00000 <small>SDA</small></span>
+          <span class="stat-sub" id="arbTradesCountDisplay">0 Executed Trades</span>
+        </div>
+
+        <div class="stat-box">
+          <span class="stat-label">BANKED NATIVE SDA (60%)</span>
+          <span class="stat-number cyan-text" id="arbSdaBankedDisplay">+0.00000 <small>SDA</small></span>
+          <span class="stat-sub">Directly Accumulating SDA</span>
+        </div>
+
+        <div class="stat-box">
+          <span class="stat-label">GMAI LP INJECTED (40%)</span>
+          <span class="stat-number emerald-text" id="arbGmaiInjectedDisplay">+0.00000 <small>WSDA</small></span>
+          <span class="stat-sub" id="arbGmaiAcquiredDisplay">+0.00 GMAI Bought into Pool</span>
+        </div>
+
+        <div class="stat-box">
+          <span class="stat-label">PROFITABLE SPREADS</span>
+          <span class="stat-number rose-text" id="arbOppsCountDisplay">0 <small>Routes</small></span>
+          <span class="stat-sub" id="arbTokensCountDisplay">Across 42 Tokens</span>
+        </div>
+      </div>
+
+      <!-- Opportunities Table Container -->
+      <div class="arb-table-container">
+        <div class="arb-table-header">
+          <span class="arb-table-title">🎯 LIVE DISCOVERED ARBITRAGE OPPORTUNITIES (DYNAMIC SIZING &amp; 40% GMAI LP SPLIT)</span>
+          <span class="arb-table-sub" id="arbScanTimeDisplay">Last Scan: Ready to Scan</span>
+        </div>
+        <div class="table-responsive">
+          <table class="arb-table" id="arbTable">
+            <thead>
+              <tr>
+                <th>TOKEN</th>
+                <th>BUY POOL</th>
+                <th>SELL POOL</th>
+                <th>OPTIMAL SIZE</th>
+                <th>EST. GROSS</th>
+                <th>EST. NET PROFIT</th>
+                <th>ROI %</th>
+                <th>PRICE IMPACT</th>
+                <th>STATUS</th>
+              </tr>
+            </thead>
+            <tbody id="arbTableBody">
+              <tr>
+                <td colspan="9" class="text-center text-muted">Click "Scan 42 Tokens" or "Start Arb Fleet" to scan real-time DEX liquidity pools.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Terminal Mission Stream Console -->
+    <section class="card terminal-card">
+      <div class="card-header terminal-header">
+        <div class="terminal-title-group">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+          <h2 class="card-title terminal-title">🖥️ LIVE MISSION CONTROL LOG STREAM</h2>
+        </div>
+
+        <div class="terminal-actions">
+          <div class="filter-pills">
+            <button class="filter-btn active" data-filter="all">ALL</button>
+            <button class="filter-btn" data-filter="buy">BUYS 🟢</button>
+            <button class="filter-btn" data-filter="sell">SELLS 🔴</button>
+            <button class="filter-btn" data-filter="warn">WARNS ⚠️</button>
+          </div>
+
+          <button id="btnAutoScroll" class="btn btn-xs btn-terminal active" title="Toggle auto-scrolling on new log messages">Auto-scroll: ON</button>
+          <button id="btnClearTerminal" class="btn btn-xs btn-terminal">Clear</button>
+          <button id="btnCopyLogs" class="btn btn-xs btn-terminal">Copy Logs</button>
+        </div>
+      </div>
+
+      <div class="terminal-window" id="terminalWindow">
+        <div class="terminal-line system">
+          <span class="term-time">[SYS]</span>
+          <span class="term-text">Mission Control initialized. Connected to Swarm Controller daemon.</span>
+        </div>
+        <div class="terminal-line info">
+          <span class="term-time">[CLI]</span>
+          <span class="term-text">Engine loaded. Ready to control loop_3buy_1sell_continuous.js with trade-size=0.03, refund-ratio=0.80, rounds=0.</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Notification Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
