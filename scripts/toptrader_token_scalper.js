@@ -715,6 +715,7 @@ async function main() {
   let sessionGmaiLpInjectedSda = 0.0;
   let sessionTradesExecuted = 0;
   let sessionWavesCount = 0;
+  let scalpWalletIndex = 0;
   let lastScalpScanTime = 0;
   let lastCheckedBlock = await provider.getBlockNumber();
 
@@ -856,11 +857,13 @@ async function main() {
         }
 
         if (candidateScalps.length > 0) {
-          // Pre-verify with on-chain staticCall to select an executable route & size (0 gas wasted)
+          // Pre-verify on-chain staticCall across distinct tokens (0 sibling collision)
           const testSigner = swarmWallets[eligibleKeys[0]];
-          let verifiedScalp = null;
+          const verifiedOpportunities = [];
+          const seenTokens = new Set();
 
           for (const cand of candidateScalps) {
+            if (seenTokens.has(cand.symbol)) continue;
             const checkSizes = [cand.tradeSizeSda || tradeSizeSda, 1.5, 1.0, 0.5].filter((s, idx, arr) => s > 0 && arr.indexOf(s) === idx);
             for (const s of checkSizes) {
               try {
@@ -875,30 +878,52 @@ async function main() {
                 }, testSigner ? { from: testSigner.address } : {});
                 const net = Number(ethers.formatEther(out - sWei));
                 if (net >= 0.0001) {
-                  verifiedScalp = { ...cand, tradeSizeSda: s, expectedProfitSda: net };
+                  verifiedOpportunities.push({ ...cand, tradeSizeSda: s, expectedProfitSda: net });
+                  seenTokens.add(cand.symbol);
                   break;
                 }
               } catch {}
             }
-            if (verifiedScalp) break;
+            if (verifiedOpportunities.length >= eligibleKeys.length) break;
           }
 
-          if (verifiedScalp) {
-            const actualTradeSize = verifiedScalp.tradeSizeSda;
-            console.log(`\n⚡ [TOP GAINER / LOSER SCALP VERIFIED ON-CHAIN] Scalping ${verifiedScalp.name}:`);
-            console.log(`   • Expected Net Profit : +${verifiedScalp.expectedProfitSda.toFixed(5)} SDA`);
-            console.log(`   • Verified Trade Size : ${actualTradeSize.toFixed(2)} SDA per wallet`);
-            console.log(`   • Executing Wallets   : ${eligibleKeys.join(", ")} (${(actualTradeSize * eligibleKeys.length).toFixed(2)} SDA Total Wave)`);
+          if (verifiedOpportunities.length > 0) {
+            // Pair each distinct opportunity to an individual wallet (ZERO self-competition)
+            // If only 1 opportunity exists, dispatch 1 rotating wallet from eligibleKeys (Round-Robin)
+            const assignments = [];
+            if (verifiedOpportunities.length === 1) {
+              const selectedKey = eligibleKeys[scalpWalletIndex % eligibleKeys.length];
+              scalpWalletIndex++;
+              assignments.push({
+                walletKey: selectedKey,
+                route: verifiedOpportunities[0]
+              });
+            } else {
+              // Multi-token parallel harvest: 1 wallet per distinct token
+              for (let i = 0; i < verifiedOpportunities.length && i < eligibleKeys.length; i++) {
+                const wKey = eligibleKeys[(scalpWalletIndex + i) % eligibleKeys.length];
+                assignments.push({
+                  walletKey: wKey,
+                  route: verifiedOpportunities[i]
+                });
+              }
+              scalpWalletIndex += assignments.length;
+            }
+
+            console.log(`\n⚡ [DIVERSIFIED SCALP WAVE] Executing ${assignments.length} distinct on-chain opportunity(ies):`);
+            for (const a of assignments) {
+              console.log(`   • [${a.walletKey}] ➔ ${a.route.name} (${a.route.tradeSizeSda.toFixed(2)} SDA | Exp: +${a.route.expectedProfitSda.toFixed(5)} SDA)`);
+            }
 
             const scalpResults = await Promise.all(
-              eligibleKeys.map((wKey, idx) =>
+              assignments.map((a, idx) =>
                 executeScalpTrade({
-                  walletKey: wKey,
-                  signer: swarmWallets[wKey],
-                  route: verifiedScalp,
-                  modeLabel: `TOP MOVER SCALP (${actualTradeSize.toFixed(2)} SDA)`,
+                  walletKey: a.walletKey,
+                  signer: swarmWallets[a.walletKey],
+                  route: a.route,
+                  modeLabel: `TOP MOVER SCALP (${a.route.tradeSizeSda.toFixed(2)} SDA)`,
                   isLive,
-                  tradeSizeSda: actualTradeSize,
+                  tradeSizeSda: a.route.tradeSizeSda,
                   lpShare,
                   staggerMs: idx * 60
                 })
@@ -938,7 +963,7 @@ async function main() {
 
             console.log(`\n==========================================================================`);
             console.log(`📊 [WAVE #${sessionWavesCount} LIVE SCALP RECAP]`);
-            console.log(`   • Trades Confirmed in Wave  : ${waveSuccess} / ${eligibleKeys.length}`);
+            console.log(`   • Trades Confirmed in Wave  : ${waveSuccess} / ${assignments.length}`);
             console.log(`   • Wave Gross SDA Profit     : ${waveGross >= 0 ? "+" : ""}${waveGross.toFixed(5)} SDA`);
             console.log(`   • Wave Net Realized Profit  : ${waveNet >= 0 ? "+" : ""}${waveNet.toFixed(5)} SDA (80% kept by wallets)`);
             console.log(`   • 💧 20% Injected into Pools: +${waveLp.toFixed(5)} SDA (GMAI 10%: +${waveGmai.toFixed(5)} | BANDIQ 5%: +${waveBand.toFixed(5)} | SVM 5%: +${waveSvm.toFixed(5)})`);
