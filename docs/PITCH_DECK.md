@@ -15,9 +15,9 @@
        ┌────────────────────────┐                          ┌────────────────────────┐
        │   AI METAVERSE GAMING  │                          │ AUTONOMOUS FLEET DEFI  │
        │  • AI Matchmaking      │                          │  • 15-Wallet Swarm     │
-       │  • Dynamic Hero NFTs   │ ◄──── 10% Net Profit ─── │  • Pinetswap V3 Copy   │
-       │  • NPC Quests & Mining │       Perpetual LP       │  • Dynamic Arbitrage   │
-       │  • 100M Fixed Supply   │       Injection          │  • Gainers/Losers Arb  │
+       │  • Dynamic Hero NFTs   │ ◄── 20% Net Profit ──── │  • Pinetswap V3 Copy   │
+       │  • NPC Quests & Mining │     Ecosystem LP         │  • Dynamic Arbitrage   │
+       │  • 100M Fixed Supply   │     (GMAI/BANDIQ/SVM)    │  • Gainers/Losers Arb  │
        └────────────────────────┘                          └────────────────────────┘
 ```
 
@@ -134,14 +134,17 @@ Traditional bots hold speculative tokens that lose value when markets dump. GMAI
                      │
         ┌────────────┴────────────┐
         ▼                         ▼
-   90% Native SDA           10% GMAI Pool
-  Retained in Wallet      Perpetual Liquidity
+   80% Native SDA           20% Ecosystem LP
+  Retained in Wallet       • 10% GMAI Pool
+                           • 5% BANDIQ Pool
+                           • 5% SVM Pool
 ```
 
 * **Atomic Execution**: Every trade is a single-transaction round-trip (`WSDA ➔ Token ➔ WSDA`).
 * **Pre-Flight On-Chain Simulation (`staticCall`)**: If expected profit is $\le 0$, the trade aborts with **0 gas spent**.
 * **Protected Core Holdings**: `GMAI`, `RIDE`, `SVM`, and `BANDIQ` are strictly protected and isolated from speculative selling.
 * **Cross-Process Mutex Locks**: Prevents nonce collisions and replacement-underpriced errors across simultaneous terminal windows.
+* **Zero Sibling Collision**: Coordinated round-robin dispatch and multi-token parallel waves eliminate intra-fleet competition.
 
 ---
 
@@ -160,7 +163,8 @@ Total Max Supply: 100,000,000 $GMAI (Fixed Forever • Zero Inflation)
                                               │
                                               ▼
                         ┌──────────────────────────────────────────┐
-                        │    10% NET PROFIT AUTO-INJECTED TO LP    │
+                        │   20% NET PROFIT AUTO-INJECTED TO LPs    │
+                        │  (10% GMAI • 5% BANDIQ • 5% SVM Pools)   │
                         └─────────────────────┬────────────────────┘
                                               │
                      ┌────────────────────────┴────────────────────────┐
@@ -199,7 +203,7 @@ The GMAI platform features an active, production-ready web console:
 | Feature | Standard GameFi Tokens | Generic DEX Arb Bots | GameMind AI ($GMAI) |
 | :--- | :---: | :---: | :---: |
 | **Max Supply** | Inflating (Billions) | N/A | **100,000,000 (Fixed)** |
-| **Real External Revenue** | ❌ None | ❌ Siloed to bot creator | **✅ 10% Auto-Injected to Token LP** |
+| **Real External Revenue** | ❌ None | ❌ Siloed to bot creator | **✅ 20% Auto-Injected to LPs (GMAI/BANDIQ/SVM)** |
 | **Token Holding Risk** | ❌ High exposure | ❌ High inventory risk | **✅ 0 Tokens Held (Pure WSDA Roundtrips)** |
 | **AI Integration** | ⚠️ Marketing buzzword | ❌ None | **✅ Live AI Combat & Matchmaking Oracle** |
 | **Multi-Wallet Fleet** | ❌ Single wallet | ⚠️ Rudimentary scripts | **✅ 15-Wallet Parallel Coordinated Swarm** |
@@ -235,7 +239,9 @@ The GMAI platform features an active, production-ready web console:
  [Q2 2026: IN PROGRESS] 🚀
  ─────────────────────────
  • Deployment of 3-Window Parallel Execution (Whale Copy, Dynamic Arb, Scalper)
- • Automated 10% Net Profit GMAI Pool Liquidity Recycling Active
+ • Automated 20% Net Profit Ecosystem Liquidity Flywheel Active (10% GMAI, 5% BANDIQ, 5% SVM)
+ • 24/7 Serverless Cloudflare Worker (Option A via Wrangler) Deployed to Global Edge
+ • Coordinated Round-Robin & Diversified Waves (Zero Sibling Reverts) Active
  • Release of Hero NFT Minting & AI Oracle Combat Arena Alpha
  • Mission Control Dashboard Telemetry Enhancement
 

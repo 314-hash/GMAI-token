@@ -33,8 +33,9 @@ The system orchestrates a synchronized **15-wallet autonomous fleet**, dynamical
 * **Whale Capital Capacity**: Pre-funded with **100.00 WSDA** base working capital per wallet.
 * **Dynamic Sizing**: Strictly clamped between **3.0 SDA minimum** and **100.0 SDA maximum**.
 * **Whale Target Tracking**: Listens on live blocks and mempool across 17 verified top-trader whale addresses on Pinetswap.
+* **Coordinated Round-Robin Dispatch**: Rotates execution through wallets (W1 ➔ W2 ➔ W3...) to prevent intra-fleet collision and ensure 100% win-rate with zero reverts.
 * **Zero-Holding Invariant**: Rejects non-WSDA directional trades and buys lacking an immediate profitable cross-pool exit before any gas or wrapping occurs. 100% atomic return to WSDA.
-* **Profit Allocation**: 90% net profit harvested to Native SDA in wallet, 10% auto-injected into the GMAI/WSDA liquidity pool.
+* **Multi-Token Liquidity Flywheel**: 80% net profit retained in wallet, 10% auto-injected to GMAI, 5% to BANDIQ, and 5% to SVM.
 
 ### 2. Window 2: Hyper-Growth Dynamic Arbitrage Engine (`scripts/hyper_growth_engine.js`)
 * **Fleet Target**: Wallets 6 to 10 (`--wallet=6-10`).
@@ -49,7 +50,7 @@ The system orchestrates a synchronized **15-wallet autonomous fleet**, dynamical
 * **Fleet Target**: Wallets 11 to 15 (`--wallet=11-15`).
 * **Dynamic Market Scanner**: Scans all **44 verified tokens** across **120 Uniswap V3 pools** on Sidra Chain every cycle.
 * **Momentum & Volatility Exploitation**: Automatically detects cross-pool fee spreads (500 ➔ 3000, 3000 ➔ 10000) on active market gainers (e.g., `ATES`, `FBAY`, `BCS`, `SUBV`, `VPE`, `SDO`, `CSF`, `JSFT`).
-* **Fleet Rotation & Parallel Execution**: Dispatches 5 wallets in parallel waves with cross-window file locks to prevent nonce collisions.
+* **Diversified Parallel Waves & Dynamic Sizing**: Dispatches 1 distinct wallet per distinct token opportunity. Automatically steps down size (`3.5 ➔ 1.5 ➔ 1.0 ➔ 0.5 SDA`) via on-chain `staticCall` to guarantee execution depth before broadcasting.
 
 ---
 
@@ -59,7 +60,11 @@ The system orchestrates a synchronized **15-wallet autonomous fleet**, dynamical
 2. **Protected Personal Holdings**: Core tokens (`GMAI`, `RIDE`, `SVM`, `BANDIQ`) are isolated and strictly excluded from liquidation or unauthorized swaps.
 3. **Pre-Flight On-Chain Simulation (`staticCall`)**: All routes are simulated on-chain via `Router.exactInput.staticCall` with `amountOutMinimum >= amountIn + 1n`. If profit is non-positive or ticks have moved, the transaction aborts with **0 gas spent**.
 4. **Cross-Process Mutex Locks (`scripts/wallet_helper.js`)**: File-based wallet locking coordinates transaction nonces across multiple terminal windows, preventing `REPLACEMENT_UNDERPRICED` or out-of-order execution errors.
-5. **GMAI Liquidity Injection**: 10% of all net SDA profit is automatically swapped into GMAI and injected into the primary liquidity pool (`0x64F21bC91D11531D88A16075d5E961d33f10B6eA`), continuously expanding token backing.
+5. **Ecosystem Liquidity Flywheel (20% Total Injection)**:
+   * **10%** auto-injected into GMAI Pool (`0x64F21bC91D11531D88A16075d5E961d33f10B6eA`).
+   * **5%** auto-injected into BANDIQ Pool (`0xB11551A7CcaD15EdD630E94Ea9257eB665d5E356`).
+   * **5%** auto-injected into SVM Pool (`0x341C91030E46c5a178B815FB7F09E3aed6E2d4fa`).
+   * **80%** net profit retained directly in the executing wallet in pure WSDA/native SDA.
 
 ---
 
@@ -126,6 +131,35 @@ node .\scripts\toptrader_token_scalper.js --wallet=11-15 --execute --amount=1.5
 
 ---
 
+## ⛅ Option A: 24/7 Serverless Cloudflare Worker (Wrangler)
+
+For zero-maintenance 24/7 cloud execution without keeping your local computer running, deploy the fleet as a **Cloudflare Worker**:
+
+* **Cron Heartbeat**: Fires every 1 minute (`* * * * *`).
+* **Coverage**: Automatically monitors all 44 tokens and 120 pools on Pinetswap.
+* **Pre-Flight Verified**: 100% principal protection via `exactInput.staticCall`.
+* **Multi-Token LP Injection**: 10% GMAI, 5% BANDIQ, 5% SVM auto-injected on every profit cycle.
+
+```powershell
+# 1. Login to Cloudflare CLI
+npx wrangler login
+
+# 2. Inject encrypted trading private key
+npx wrangler secret put PRIVATE_KEY_1
+
+# 3. Enable live trading (type 'true' when prompted)
+npx wrangler secret put LIVE_EXECUTION
+
+# 4. Deploy live to global edge
+npm run worker:deploy
+
+# 5. Tail real-time 1-minute execution logs
+npm run worker:tail
+```
+See full documentation in [docs/SERVERLESS_WRANGLER_DEPLOYMENT.md](docs/SERVERLESS_WRANGLER_DEPLOYMENT.md).
+
+---
+
 ## 📊 Mission Control Dashboard
 
 Launch the local real-time web telemetry dashboard:
@@ -154,7 +188,11 @@ The fleet scans and trades across **44 verified tokens** and **120 Uniswap-V3 po
 * **Pinetswap Factory (V3)**: [`0xCFE41fb5dA87916D84E7F22889087b4Ff7163cDE`](https://ledger.sidrachain.com/address/0xCFE41fb5dA87916D84E7F22889087b4Ff7163cDE)
 * **Wrapped SDA (WSDA)**: [`0xE4095a910209D7BE03B55D02F40d4554B1666182`](https://ledger.sidrachain.com/address/0xE4095a910209D7BE03B55D02F40d4554B1666182)
 * **GMAI Token**: [`0x4765561e63914E72168bBd2A7e2ce72F9057ca04`](https://ledger.sidrachain.com/address/0x4765561e63914E72168bBd2A7e2ce72F9057ca04)
-* **GMAI / WSDA Primary Pool**: [`0x64F21bC91D11531D88A16075d5E961d33f10B6eA`](https://ledger.sidrachain.com/address/0x64F21bC91D11531D88A16075d5E961d33f10B6eA)
+* **GMAI / WSDA Primary Pool**: [`0x64F21bC91D11531D88A16075d5E961d33f10B6eA`](https://ledger.sidrachain.com/address/0x64F21bC91D11531D88A16075d5E961d33f10B6eA) (Fee: 10000)
+* **BANDIQ / BNDQ Token**: [`0x6d1537bEE4F1EE3f55F4BC9319Aa40252cd39133`](https://ledger.sidrachain.com/address/0x6d1537bEE4F1EE3f55F4BC9319Aa40252cd39133)
+* **BANDIQ / WSDA Pool**: [`0xB11551A7CcaD15EdD630E94Ea9257eB665d5E356`](https://ledger.sidrachain.com/address/0xB11551A7CcaD15EdD630E94Ea9257eB665d5E356) (Fee: 10000)
+* **SVM Token**: [`0xFB1267FB3b9BdbcE3a1C30A9B0A1454e14E81ACb`](https://ledger.sidrachain.com/address/0xFB1267FB3b9BdbcE3a1C30A9B0A1454e14E81ACb)
+* **SVM / WSDA Pool**: [`0x341C91030E46c5a178B815FB7F09E3aed6E2d4fa`](https://ledger.sidrachain.com/address/0x341C91030E46c5a178B815FB7F09E3aed6E2d4fa) (Fee: 3000)
 
 ---
 

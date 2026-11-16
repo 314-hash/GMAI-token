@@ -11,7 +11,7 @@ Deploy your GMAI autonomous trading engine and liquidity flywheel as a **24/7 se
 * **Zero Infrastructure Overhead**: No local PC or dedicated server needed. Executes across Cloudflare's 330+ global edge data centers.
 * **Full Market Coverage**: Scans **44 verified tokens** across **120 Uniswap V3 pools** on Sidra Chain every cycle.
 * **Pre-Flight On-Chain Simulation (`staticCall`)**: Zero gas is broadcast if spreads slip or net profit falls below `0.0001` SDA.
-* **GMAI Liquidity Flywheel**: Automatically routes 10% of net profit into the GMAI/WSDA pool (`0x64F21bC91D11531D88A16075d5E961d33f10B6eA`).
+* **Multi-Token Liquidity Flywheel**: Automatically routes **10% to GMAI**, **5% to BANDIQ**, and **5% to SVM** pools on every profitable cycle, retaining **80% net profit** in the wallet.
 * **Public REST API & Webhook Trigger**: Query live spreads, trigger manual trades, and inspect portfolio health via HTTP.
 
 ---

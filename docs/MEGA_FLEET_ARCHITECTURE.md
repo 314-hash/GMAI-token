@@ -82,12 +82,29 @@ $$\text{Spread}_{\%} = \frac{Price_{Pool B} - Price_{Pool A}}{Price_{Pool A}} \t
 
 * Tokens with $\text{Spread} \ge 1.0\%$ are classified as **Top Gainers**.
 * Routes yielding $\ge +0.0001$ SDA net profit are queued.
-* Wallets 11–15 execute in parallel waves, harvesting profit directly back to WSDA.
+* **Diversified Parallel Waves**: Each wallet in Squad 3 is assigned to a *distinct* token opportunity, eliminating sibling competition in the same pool.
+* **On-Chain Sizing Fallback**: Automatically evaluates trade size on-chain (`3.5 ➔ 1.5 ➔ 1.0 ➔ 0.5 SDA`) using `staticCall` to match true pool tick depth before broadcasting.
+* **Round-Robin Rotation**: If only one spread exists in the entire market, a single rotating wallet executes, ensuring 100% win-rate and zero wasted gas.
 
 ---
 
-## 5. Liquidity Reinvestment (GMAI Ecosystem Support)
+## 5. Ecosystem Liquidity Flywheel (Multi-Token Reinvestment)
 
 For every profitable trade executed by any squad:
-1. **90%** of net profit is auto-unwrapped and retained in the executing wallet as native SDA.
-2. **10%** of net profit is routed to `router.exactInputSingle` to buy `GMAI` from the `10000` fee pool (`0x64F21bC91D11531D88A16075d5E961d33f10B6eA`), continuously bolstering token floor price and liquidity backing.
+1. **80%** of net profit is retained in the executing wallet as pure profit (auto-unwrapped from WSDA to native SDA when exceeding reserve targets).
+2. **10%** of net profit is routed to `router.exactInputSingle` to buy `GMAI` from the `10000` fee pool (`0x64F21bC91D11531D88A16075d5E961d33f10B6eA`).
+3. **5%** of net profit is routed to buy `BANDIQ` from the `10000` fee pool (`0xB11551A7CcaD15EdD630E94Ea9257eB665d5E356`).
+4. **5%** of net profit is routed to buy `SVM` from the `3000` fee pool (`0x341C91030E46c5a178B815FB7F09E3aed6E2d4fa`).
+
+This multi-token flywheel continuously bolsters floor price, expands DEX liquidity backing, and strengthens cross-token reserves across the entire Sidra Chain ecosystem.
+
+---
+
+## 6. Live Fleet Capital & Portfolio Status
+
+| Squad | Wallets | Target Role | Liquid SDA Capital | Base Reserve |
+| :--- | :--- | :--- | :--- | :--- |
+| **Squad 1** | Wallets 1 – 5 | Whale Copy Trading (Pinetswap V3) | ~1,160 SDA | 100 WSDA each |
+| **Squad 2** | Wallets 6 – 10 | Hyper Arbitrage Engine (Dynamic Size) | ~80 SDA | 10 WSDA each |
+| **Squad 3** | Wallets 11 – 15 | Top Gainers/Losers Momentum Scalper | ~120 SDA | 5 WSDA each |
+| **TOTAL** | **15 Wallets** | **Synchronized Autonomous Fleet** | **1,361.30 SDA** | **575 WSDA** |
