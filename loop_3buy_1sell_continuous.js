@@ -68,15 +68,24 @@ export class SwarmEngine extends EventEmitter {
     this.poolFee = customConfig.poolFee || DEFAULT_POOL_FEE;
     this.tokenSymbol = "GMAI";
 
+    let initDelay = Number(customConfig.delay ?? (process.env.STEP_DELAY_MS ? Number(process.env.STEP_DELAY_MS) : 3000));
+    if (initDelay > 0 && initDelay <= 600) initDelay = initDelay * 1000;
+
+    let initWalletDelay = Number(customConfig.walletDelay ?? (process.env.WALLET_DELAY_MS ? Number(process.env.WALLET_DELAY_MS) : 30000));
+    if (initWalletDelay > 0 && initWalletDelay <= 600) initWalletDelay = initWalletDelay * 1000;
+
+    let initInterval = Number(customConfig.interval ?? (process.env.INTERVAL_MS ? Number(process.env.INTERVAL_MS) : 30000));
+    if (initInterval > 0 && initInterval <= 600) initInterval = initInterval * 1000;
+
     this.config = {
       isLive: customConfig.isLive ?? false,
       tradeSize: Number(customConfig.tradeSize ?? 0.03),
-      refundRatio: Number(customConfig.refundRatio ?? 0.80),
+      refundRatio: Number(customConfig.refundRatio ?? 0.90),
       rounds: Number(customConfig.rounds ?? 0), // 0 = continuous
       buys: Number(customConfig.buys ?? 3),
-      delay: Number(customConfig.delay ?? (process.env.STEP_DELAY_MS ? Number(process.env.STEP_DELAY_MS) : 3000)),
-      walletDelay: Number(customConfig.walletDelay ?? (process.env.WALLET_DELAY_MS ? Number(process.env.WALLET_DELAY_MS) : 30000)),
-      interval: Number(customConfig.interval ?? (process.env.INTERVAL_MS ? Number(process.env.INTERVAL_MS) : 60000)),
+      delay: initDelay,
+      walletDelay: initWalletDelay,
+      interval: initInterval,
       minReserve: Number(customConfig.minReserve ?? 0.5),
       maxSlippageBps: BigInt(customConfig.maxSlippageBps ?? 100),
       gasPriceWei: BigInt(customConfig.gasPriceWei ?? 2500000000), // 2.5 Gwei
@@ -106,13 +115,11 @@ export class SwarmEngine extends EventEmitter {
   }
 
   initWallets() {
-    const rawKeys = {
-      wallet1: process.env.PRIVATE_KEY_1 || process.env.PRIVATE_KEY,
-      wallet2: process.env.PRIVATE_KEY_2,
-      wallet3: process.env.PRIVATE_KEY_3,
-      wallet4: process.env.PRIVATE_KEY_4,
-      wallet5: process.env.PRIVATE_KEY_5
-    };
+    const rawKeys = {};
+  for (let i = 1; i <= 50; i++) {
+    const pk = process.env["PRIVATE_KEY_" + i] || (i === 1 ? process.env.PRIVATE_KEY : null);
+    if (pk) rawKeys["wallet" + i] = pk;
+  }
 
     this.wallets = {};
     for (const [k, pk] of Object.entries(rawKeys)) {
@@ -540,7 +547,11 @@ export class SwarmEngine extends EventEmitter {
       if (wd > 0 && wd <= 600) wd = wd * 1000;
       this.config.walletDelay = wd;
     }
-    if (newConfig.interval !== undefined) this.config.interval = Number(newConfig.interval);
+    if (newConfig.interval !== undefined) {
+      let iv = Number(newConfig.interval);
+      if (iv > 0 && iv <= 600) iv = iv * 1000;
+      this.config.interval = iv;
+    }
     if (newConfig.minReserve !== undefined) this.config.minReserve = Number(newConfig.minReserve);
     if (newConfig.buys !== undefined) this.config.buys = Number(newConfig.buys);
     this.log("info", `Config updated: Trade Size=${this.config.tradeSize} SDA, Refund Ratio=${this.config.refundRatio}, Live=${this.config.isLive}, Wallet Delay=${(this.config.walletDelay / 1000).toFixed(0)}s, Rounds=${this.config.rounds}`);
@@ -622,7 +633,7 @@ if (isCli) {
   
   const refundRatioArg = Number(
     args.find((a) => a.startsWith("--refund-ratio="))?.split("=")[1] ||
-    (process.env.RECOVER_GAS_PERCENT ? Number(process.env.RECOVER_GAS_PERCENT) / 100 : 0.80)
+    (process.env.RECOVER_GAS_PERCENT ? Number(process.env.RECOVER_GAS_PERCENT) / 100 : 0.90)
   );
   
   let delayArg = Number(
@@ -643,11 +654,14 @@ if (isCli) {
     walletDelayArg = walletDelayArg * 1000;
   }
   
-  const intervalArg = Number(
+  let intervalArg = Number(
     args.find((a) => a.startsWith("--interval="))?.split("=")[1] ||
     process.env.INTERVAL_MS ||
-    60000
+    30000
   );
+  if (intervalArg > 0 && intervalArg <= 600) {
+    intervalArg = intervalArg * 1000;
+  }
   
   const maxRoundsArg = Number(
     args.find((a) => a.startsWith("--rounds="))?.split("=")[1] ||

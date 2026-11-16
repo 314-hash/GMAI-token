@@ -16,9 +16,22 @@ const POOL_ABI = [
 
 const token0Cache = new Map(); // poolAddress.toLowerCase() -> boolean isToken0WSDA
 
-export async function scanMarket(customProvider = null) {
+export async function scanMarket(customProvider = null, additionalTokens = []) {
   const rawConfig = JSON.parse(fs.readFileSync(TOKENS_CONFIG_PATH, "utf8"));
-  const { network, tokens } = rawConfig;
+  const { network } = rawConfig;
+  const configuredTokens = rawConfig.tokens || [];
+
+  // Merge any dynamic additional tokens (e.g. enriched via Top Trader radar)
+  const tokenMap = new Map();
+  for (const t of configuredTokens) {
+    if (t.address) tokenMap.set(t.address.toLowerCase(), t);
+  }
+  for (const t of (additionalTokens || [])) {
+    if (t && t.address && !tokenMap.has(t.address.toLowerCase())) {
+      tokenMap.set(t.address.toLowerCase(), t);
+    }
+  }
+  const tokens = Array.from(tokenMap.values());
 
   const rpcUrl = process.env.RPC_URL || network.rpc || "https://rpc.sidrachain.com";
   const sidraNetwork = ethers.Network.from({ name: "sidra", chainId: network.chainId || 97453 });
@@ -43,9 +56,10 @@ export async function scanMarket(customProvider = null) {
     }
   }
 
-  // Scan in parallel batches of 12
-  const CHUNK_SIZE = 12;
+  // Scan in parallel batches of 36 for fast low-latency discovery
+  const CHUNK_SIZE = 36;
   const poolResults = new Map();
+  const Q96 = 2n ** 96n;
 
   for (let i = 0; i < poolTasks.length; i += CHUNK_SIZE) {
     const chunk = poolTasks.slice(i, i + CHUNK_SIZE);
@@ -74,16 +88,26 @@ export async function scanMarket(customProvider = null) {
             poolContract.liquidity()
           ]);
 
-          const sqrtPriceX96 = slot0[0];
+          const sqrtPriceX96 = BigInt(slot0[0]);
           const liq = BigInt(liquidity);
           const spotPriceSda = calculateSpotPrice(sqrtPriceX96, isToken0WSDA, task.decimals);
-          const isHealthy = liq > 0n && spotPriceSda > 0;
+
+          // Calculate virtual WSDA liquidity depth in SDA units
+          let virtualWsdaWei = 0n;
+          if (liq > 0n && sqrtPriceX96 > 0n) {
+            virtualWsdaWei = isToken0WSDA
+              ? (liq * Q96) / sqrtPriceX96
+              : (liq * sqrtPriceX96) / Q96;
+          }
+          const virtualWsdaDepthSda = Number(ethers.formatEther(virtualWsdaWei));
+          const isHealthy = liq > 0n && spotPriceSda > 0 && virtualWsdaDepthSda > 0;
 
           poolResults.set(poolKey, {
             feeTier: task.feeTier,
             poolAddress: task.poolAddress,
             sqrtPriceX96: sqrtPriceX96.toString(),
             liquidity: liq,
+            virtualWsdaDepthSda,
             isToken0WSDA,
             spotPriceSda,
             isHealthy

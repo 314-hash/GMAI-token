@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { SwarmEngine } from "./loop_3buy_1sell_continuous.js";
 import { ArbitrageGmaiEngine } from "./engine/arbitrage_gmai_lp.js";
+import { SidraTempestEngine } from "./scripts/stae_automation.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -22,11 +23,11 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 
 const engine = new SwarmEngine({
   tradeSize: Number(process.env.TRADE_SIZE_SDA || 0.03),
-  refundRatio: Number(process.env.RECOVER_GAS_PERCENT ? Number(process.env.RECOVER_GAS_PERCENT) / 100 : 0.80),
+  refundRatio: Number(process.env.RECOVER_GAS_PERCENT ? Number(process.env.RECOVER_GAS_PERCENT) / 100 : 0.90),
   rounds: Number(process.env.ROUNDS || 0),
   delay: Number(process.env.STEP_DELAY_MS || 3000),
   walletDelay: Number(process.env.WALLET_DELAY_MS || 30000),
-  interval: Number(process.env.INTERVAL_MS || 60000),
+  interval: Number(process.env.INTERVAL_MS || 30000),
   isLive: process.env.LIVE === "true"
 });
 
@@ -34,8 +35,15 @@ const arbEngine = new ArbitrageGmaiEngine({
   isLive: process.env.LIVE === "true",
   minProfitThreshold: Number(process.env.ARB_MIN_PROFIT || 0.0005),
   intervalSec: Number(process.env.ARB_INTERVAL_SEC || 15),
-  gmaiProfitRatio: 0.40,
+  gmaiProfitRatio: Number(process.env.LP_PROFIT_SHARE || 0.10),
   unwrapWsda: true
+});
+
+const staeEngine = new SidraTempestEngine({
+  isLive: process.env.LIVE_TRADING === "true",
+  minTradeSda: Number(process.env.ARB_MIN_TRADE_SIZE_SDA || 5.0),
+  maxTradeSda: Number(process.env.ARB_MAX_TRADE_SIZE_SDA || 5.0),
+  wsdaReserveSda: Number(process.env.WSDA_RESERVE_SDA || 5.0)
 });
 
 // SSE Clients Registry
@@ -294,6 +302,50 @@ const server = http.createServer(async (req, res) => {
     });
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true, message: "Arbitrage scan initiated." }));
+    return;
+  }
+
+  // REST API: SIDRA TEMPEST (STAE) Snapshot
+  if (url.pathname === "/api/stae/snapshot" && req.method === "GET") {
+    const ledgerSnap = staeEngine.ledger.getDashboardSnapshot();
+    const riskMetrics = staeEngine.riskEngine.getMetricsSnapshot();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      safeJsonStringify({
+        ok: true,
+        isLive: staeEngine.isLive,
+        round: staeEngine.round,
+        riskMetrics,
+        riskConfig: staeEngine.riskEngine.config,
+        ...ledgerSnap
+      })
+    );
+    return;
+  }
+
+  // REST API: SIDRA TEMPEST (STAE) Trigger Scan/Execution Cycle
+  if (url.pathname === "/api/stae/cycle" && req.method === "POST") {
+    try {
+      const cycleRes = await staeEngine.runCycle();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(safeJsonStringify({ ok: true, ...cycleRes }));
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
+    return;
+  }
+
+  // REST API: SIDRA TEMPEST (STAE) Emergency Stop / Reset
+  if (url.pathname === "/api/stae/emergency-stop" && req.method === "POST") {
+    const body = await parseJsonBody(req);
+    if (body.reset) {
+      staeEngine.riskEngine.resetCircuitBreaker();
+    } else {
+      staeEngine.riskEngine.triggerEmergencyStop(body.reason || "Manual Operator Emergency Stop from Dashboard");
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(safeJsonStringify({ ok: true, riskMetrics: staeEngine.riskEngine.getMetricsSnapshot() }));
     return;
   }
 

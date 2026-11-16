@@ -142,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Preset Button Click
   btnLoadPreset.addEventListener("click", () => {
     inputTradeSize.value = "0.1";
-    inputRefundRatio.value = "0.70";
+    inputRefundRatio.value = "0.90";
     inputRounds.value = "0";
     inputBuys.value = "3";
     inputIsLive.checked = true;
@@ -152,7 +152,7 @@ document.addEventListener("DOMContentLoaded", () => {
     inputMinReserve.value = "0.5";
     inputSlippage.value = "100";
     updateMathAndCliPreview();
-    showToast("Preset Loaded: 0.1 SDA / 70% Refund / 30s Delays / Live!", "success");
+    showToast("Preset Loaded: 0.1 SDA / 90% Refund (10% Pool) / 30s Delays / Live!", "success");
   });
 
   // Copy CLI command
@@ -414,7 +414,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const walletDelayVal = parseInt(inputWalletDelay?.value, 10) || 30;
     const payload = {
       tradeSize: parseFloat(inputTradeSize.value) || 0.1,
-      refundRatio: parseFloat(inputRefundRatio.value) || 0.70,
+      refundRatio: parseFloat(inputRefundRatio.value) || 0.90,
       rounds: parseInt(inputRounds.value, 10) || 0,
       buys: parseInt(inputBuys.value, 10) || 3,
       delay: delayVal <= 600 ? delayVal * 1000 : delayVal,
@@ -501,7 +501,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const walletDelayVal = parseInt(inputWalletDelay?.value, 10) || 30;
     const payload = {
       tradeSize: parseFloat(inputTradeSize.value) || 0.1,
-      refundRatio: parseFloat(inputRefundRatio.value) || 0.70,
+      refundRatio: parseFloat(inputRefundRatio.value) || 0.90,
       rounds: parseInt(inputRounds.value, 10) || 0,
       buys: parseInt(inputBuys.value, 10) || 3,
       delay: delayVal <= 600 ? delayVal * 1000 : delayVal,
@@ -648,7 +648,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const res = await fetch("/api/arb/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isLive: inputIsLive.checked, gmaiProfitRatio: 0.40 })
+          body: JSON.stringify({ isLive: inputIsLive.checked, gmaiProfitRatio: 0.10 })
         });
         const data = await res.json();
         if (res.ok) {
@@ -729,7 +729,7 @@ document.addEventListener("DOMContentLoaded", () => {
     sseSource.addEventListener("arb_trade_executed", (e) => {
       try {
         const item = JSON.parse(e.data);
-        showToast(`Arb Executed on ${item.token}! 40% routed to GMAI LP`, "success");
+        showToast(`Arb Executed on ${item.token}! 10% routed to GMAI LP, 90% retained as SDA profit`, "success");
         fetchArbState();
         fetchWallets();
       } catch (err) {}

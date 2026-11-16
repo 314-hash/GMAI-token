@@ -48,8 +48,8 @@
       </div>
 
       <!-- Preset Quick Button -->
-      <button id="btnLoadPreset" class="btn btn-preset" title="Load exact flag parameters: 0.1 trade size, 0.70 refund, 30s delays, rounds=0 (infinite), execute=true">
-        <span>⚡ Quick Preset (0.1 SDA / 70% Refund / 30s Delays / Live)</span>
+      <button id="btnLoadPreset" class="btn btn-preset" title="Load exact flag parameters: 0.1 trade size, 0.90 refund, 30s delays, rounds=0 (infinite), execute=true">
+        <span>⚡ Quick Preset (0.1 SDA / 90% Refund / 30s Delays / Live)</span>
       </button>
 
       <!-- Emergency Stop Button -->
@@ -136,7 +136,7 @@
 
           <div class="cli-command-preview">
             <span class="cli-label">ACTIVE EQUIVALENT CLI COMMAND:</span>
-            <code id="cliCommandPreview">node .\scripts\loop_3buy_1sell_continuous.js --trade-size=0.1 --refund-ratio=0.70 --rounds=0 --delay=30 --wallet-delay=30 --execute</code>
+            <code id="cliCommandPreview">node .\scripts\loop_3buy_1sell_continuous.js --trade-size=0.1 --refund-ratio=0.90 --rounds=0 --delay=30 --wallet-delay=30 --execute</code>
             <button id="btnCopyCli" class="btn-copy" title="Copy CLI command to clipboard">📋</button>
           </div>
         </section>
@@ -176,10 +176,10 @@
             <div class="form-group">
               <label for="inputRefundRatio">Sell Leg Refund Ratio</label>
               <div class="input-with-unit">
-                <input type="number" id="inputRefundRatio" step="0.05" min="0.10" max="1.00" value="0.70" required>
-                <span class="unit" id="refundRatioPercent">70%</span>
+                <input type="number" id="inputRefundRatio" step="0.05" min="0.10" max="1.00" value="0.90" required>
+                <span class="unit" id="refundRatioPercent">90%</span>
               </div>
-              <span class="field-hint">Target SDA recovery on 4th step</span>
+              <span class="field-hint">Target SDA recovery on 4th step (90% wallet / 10% pool)</span>
             </div>
 
             <!-- Target Rounds -->
@@ -338,7 +338,7 @@
           <span class="arb-icon">🌐</span>
           <div>
             <h2 class="card-title">42-TOKEN ARBITRAGE &amp; GMAI LIQUIDITY ACCUMULATOR</h2>
-            <p class="card-subtitle">Accumulate Native SDA · Automatically Route 40% of Net Profit to GMAI DEX Liquidity Pool</p>
+            <p class="card-subtitle">Retain 90% Native SDA Profit in Wallet · Route 10% of Net Profit to GMAI DEX Liquidity Pool</p>
           </div>
         </div>
 
@@ -371,13 +371,13 @@
         </div>
 
         <div class="stat-box">
-          <span class="stat-label">BANKED NATIVE SDA (60%)</span>
+          <span class="stat-label">RETAINED NATIVE SDA (90%)</span>
           <span class="stat-number cyan-text" id="arbSdaBankedDisplay">+0.00000 <small>SDA</small></span>
-          <span class="stat-sub">Directly Accumulating SDA</span>
+          <span class="stat-sub">90% SDA Profit in Wallet</span>
         </div>
 
         <div class="stat-box">
-          <span class="stat-label">GMAI LP INJECTED (40%)</span>
+          <span class="stat-label">GMAI LP INJECTED (10%)</span>
           <span class="stat-number emerald-text" id="arbGmaiInjectedDisplay">+0.00000 <small>WSDA</small></span>
           <span class="stat-sub" id="arbGmaiAcquiredDisplay">+0.00 GMAI Bought into Pool</span>
         </div>
@@ -392,7 +392,7 @@
       <!-- Opportunities Table Container -->
       <div class="arb-table-container">
         <div class="arb-table-header">
-          <span class="arb-table-title">🎯 LIVE DISCOVERED ARBITRAGE OPPORTUNITIES (DYNAMIC SIZING &amp; 40% GMAI LP SPLIT)</span>
+          <span class="arb-table-title">🎯 LIVE DISCOVERED ARBITRAGE OPPORTUNITIES (DYNAMIC SIZING &amp; 10% POOL / 90% WALLET SDA PROFIT)</span>
           <span class="arb-table-sub" id="arbScanTimeDisplay">Last Scan: Ready to Scan</span>
         </div>
         <div class="table-responsive">

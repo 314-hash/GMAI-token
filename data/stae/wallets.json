@@ -1,0 +1,67 @@
+[
+  {
+    "walletId": "wallet1",
+    "address": "0x746fe50362Af424aB9C7a56E90099eF25f19217e",
+    "nativeSda": 33.73619123224449,
+    "wsda": 10,
+    "gmai": 6891191.517516598,
+    "combinedSda": 43.736191,
+    "nonce": 54040,
+    "isCleanNonce": true,
+    "realizedProfitSda": 0,
+    "tradesExecuted": 0,
+    "updatedAt": "2026-11-08T01:55:57.852Z"
+  },
+  {
+    "walletId": "wallet2",
+    "address": "0xE3aFaeC0677A6C34CC190B1f8f68f1d712D45614",
+    "nativeSda": 40.59074863173561,
+    "wsda": 10,
+    "gmai": 9908496.090843013,
+    "combinedSda": 50.590749,
+    "nonce": 27178,
+    "isCleanNonce": true,
+    "realizedProfitSda": 0.003422048246376064,
+    "tradesExecuted": 1,
+    "updatedAt": "2026-11-08T01:55:57.852Z"
+  },
+  {
+    "walletId": "wallet3",
+    "address": "0x91A14288b6aAb7936a823A92953AB8B6560Eab40",
+    "nativeSda": 22.512331768598038,
+    "wsda": 10,
+    "gmai": 8955964.92356853,
+    "combinedSda": 32.512332,
+    "nonce": 24317,
+    "isCleanNonce": true,
+    "realizedProfitSda": 0,
+    "tradesExecuted": 0,
+    "updatedAt": "2026-11-08T01:55:57.852Z"
+  },
+  {
+    "walletId": "wallet4",
+    "address": "0x1821F246a27287a2187E1D634B8883030fA14731",
+    "nativeSda": 18.218049513638295,
+    "wsda": 10,
+    "gmai": 104889.9379183618,
+    "combinedSda": 28.21805,
+    "nonce": 14508,
+    "isCleanNonce": true,
+    "realizedProfitSda": 0,
+    "tradesExecuted": 0,
+    "updatedAt": "2026-11-08T01:55:57.852Z"
+  },
+  {
+    "walletId": "wallet5",
+    "address": "0x5f28a55EBAf57aB7d83EC40c16DBa43329085322",
+    "nativeSda": 19.95150658180593,
+    "wsda": 10,
+    "gmai": 10003897.708455158,
+    "combinedSda": 29.951507,
+    "nonce": 22001,
+    "isCleanNonce": true,
+    "realizedProfitSda": 0,
+    "tradesExecuted": 0,
+    "updatedAt": "2026-11-08T01:55:57.852Z"
+  }
+]

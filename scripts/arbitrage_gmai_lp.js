@@ -11,14 +11,16 @@ async function main() {
   const minProfitThreshold = Number(args.find((a) => a.startsWith("--min-profit="))?.split("=")[1] || 0.0005);
   const intervalSec = Number(args.find((a) => a.startsWith("--interval="))?.split("=")[1] || 15);
   const unwrapWsda = !args.includes("--no-unwrap");
-  const gmaiRatio = Number(args.find((a) => a.startsWith("--gmai-ratio="))?.split("=")[1] || 0.40);
+  const gmaiRatio = Number(args.find((a) => a.startsWith("--gmai-ratio="))?.split("=")[1] || process.env.LP_PROFIT_SHARE || 0.10);
+  const lpPct = Math.round(gmaiRatio * 100);
+  const walletPct = 100 - lpPct;
 
   console.log("==========================================================================");
-  console.log("🌐 42-TOKEN SWARM ARBITRAGE & GMAI LIQUIDITY ACCUMULATOR");
+  console.log(`🦅 43-TOKEN TOP SCALPER & ${lpPct}% GMAI LIQUIDITY ACCUMULATOR`);
   console.log("==========================================================================");
   console.log(`Execution Mode : ${isLive ? "🚨 LIVE ON-CHAIN BROADCAST" : "🛡️ DRY-RUN SIMULATION (pass --execute for live)"}`);
-  console.log(`SDA Accumulate : 60% Banked directly as Native SDA`);
-  console.log(`GMAI Liquidity : 40% Routed directly into GMAI V3 Pool (0x64F2...B6eA)`);
+  console.log(`GMAI Pool      : ${lpPct}% Routed directly into GMAI V3 Pool (0x64F2...B6eA)`);
+  console.log(`Retained SDA   : ${walletPct}% Kept in executing wallet as native SDA reserve`);
   console.log(`Min Net Profit : >= +${minProfitThreshold} SDA per trade`);
   console.log(`Scan Interval  : ${intervalSec}s`);
   console.log(`Rounds Mode    : ${maxRounds === 0 ? "Continuous 24/7 Monitoring" : `${maxRounds} Round(s)`}`);
@@ -55,8 +57,8 @@ async function main() {
   console.log(`Total Opportunities Found : ${finalStats.totalOpportunitiesFound}`);
   console.log(`Trades Executed           : ${finalStats.tradesExecuted}`);
   console.log(`Total Realized Net Profit : +${finalStats.netProfitSda.toFixed(5)} SDA`);
-  console.log(`Native SDA Banked (60%)   : +${finalStats.accumulatedNativeSda.toFixed(5)} SDA`);
-  console.log(`GMAI Liquidity Added (40%): +${finalStats.gmaiLiquidityInjectedSda.toFixed(5)} WSDA`);
+  console.log(`Retained Native SDA (${walletPct}%) : +${finalStats.accumulatedNativeSda.toFixed(5)} SDA`);
+  console.log(`GMAI Pool Injected (${lpPct}%)  : +${finalStats.gmaiLiquidityInjectedSda.toFixed(5)} WSDA`);
   console.log(`GMAI Tokens Acquired      : +${finalStats.gmaiTokensAcquired.toFixed(4)} GMAI`);
   console.log("==========================================================================\n");
 }

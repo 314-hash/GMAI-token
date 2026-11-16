@@ -80,8 +80,8 @@ export function findTokenOpportunities(market, testSizes = [0.05, 0.1, 0.2, 0.35
   const totalGasCostSda = Number(ethers.formatUnits(gasEstimate * SAFE_GAS_PRICE, 18)); // ~0.0008 SDA
 
   for (const token of market) {
-    // Exclude SVM from cross-pool DEX arb because of 5% sell tax
-    if (token.symbol === "SVM") continue;
+    // Exclude SVM and ATES from cross-pool DEX arb
+    if (token.symbol === "SVM" || token.symbol === "ATES" || (token.address && token.address.toLowerCase() === "0x05322f2356e8ffdc28c4a5e69d4feebebbb33649")) continue;
     if (!token.pools || token.pools.length < 2) continue;
 
     const healthyPools = token.pools.filter((p) => p.isHealthy && p.spotPriceSda > 0 && p.liquidity > 0n);
@@ -164,11 +164,11 @@ export class ArbitrageGmaiEngine extends EventEmitter {
 
     this.provider = new ethers.JsonRpcProvider(RPC_URL, sidraNetwork, { staticNetwork: sidraNetwork });
     this.isLive = options.isLive || false;
-    this.minProfitThreshold = Number(options.minProfitThreshold || 0.0005); // min +0.0005 SDA net
+    this.minProfitThreshold = Number(options.minProfitThreshold !== undefined ? options.minProfitThreshold : 0.0001); // min net profit threshold
     this.intervalSec = Number(options.intervalSec || 15);
     this.maxRounds = Number(options.maxRounds || 0); // 0 = continuous
-    this.unwrapWsda = options.unwrapWsda !== false; // Default true: auto-unwrap 60% profit to native SDA
-    this.gmaiProfitRatio = Number(options.gmaiProfitRatio || 0.40); // 40% of profit to GMAI liquidity
+    this.unwrapWsda = options.unwrapWsda !== false; // Default true: auto-unwrap profit to native SDA
+    this.gmaiProfitRatio = Number(options.gmaiProfitRatio !== undefined ? options.gmaiProfitRatio : Number(process.env.LP_PROFIT_SHARE || "0.10")); // 10% of profit to GMAI liquidity pool, 90% retained in wallet
 
     this.isRunning = false;
     this.isExecutingScan = false;
@@ -182,8 +182,8 @@ export class ArbitrageGmaiEngine extends EventEmitter {
       grossProfitSda: 0,
       totalGasSpentSda: 0,
       netProfitSda: 0,
-      accumulatedNativeSda: 0, // 60% banked
-      gmaiLiquidityInjectedSda: 0, // 40% routed to GMAI pool
+      accumulatedNativeSda: 0, // 90% retained native SDA in executing wallet
+      gmaiLiquidityInjectedSda: 0, // 10% routed to GMAI pool
       gmaiTokensAcquired: 0,
       lastScanTime: null,
       walletStats: {}
@@ -195,13 +195,11 @@ export class ArbitrageGmaiEngine extends EventEmitter {
   }
 
   initWallets() {
-    const rawKeys = {
-      wallet1: process.env.PRIVATE_KEY_1 || process.env.PRIVATE_KEY,
-      wallet2: process.env.PRIVATE_KEY_2,
-      wallet3: process.env.PRIVATE_KEY_3,
-      wallet4: process.env.PRIVATE_KEY_4,
-      wallet5: process.env.PRIVATE_KEY_5
-    };
+    const rawKeys = {};
+  for (let i = 1; i <= 50; i++) {
+    const pk = process.env["PRIVATE_KEY_" + i] || (i === 1 ? process.env.PRIVATE_KEY : null);
+    if (pk) rawKeys["wallet" + i] = pk;
+  }
 
     for (const [key, pk] of Object.entries(rawKeys)) {
       if (pk) {
@@ -263,6 +261,29 @@ export class ArbitrageGmaiEngine extends EventEmitter {
       }
     }
     return overview;
+  }
+
+  async unwrapAllWallets() {
+    if (!this.isLive) return;
+    const wsdaContract = new ethers.Contract(WSDA_ADDR, WSDA_ABI, this.provider);
+    for (const [key, wallet] of Object.entries(this.wallets)) {
+      try {
+        const freshBal = await wsdaContract.balanceOf(wallet.address);
+        if (freshBal > 0n) {
+          this.log("info", `[${key.toUpperCase()}] Auto-converting ${ethers.formatEther(freshBal)} WSDA -> Native SDA token in wallet...`);
+          const nonce = await waitForCleanNonce(this.provider, wallet.address);
+          const tx = await wsdaContract.connect(wallet).withdraw(freshBal, {
+            gasLimit: 85000n,
+            gasPrice: SAFE_GAS_PRICE,
+            nonce
+          });
+          await tx.wait(1);
+          this.log("success", `[${key.toUpperCase()}] Successfully swapped to native SDA! (Tx: ${tx.hash.slice(0, 16)}...)`);
+        }
+      } catch (err) {
+        this.log("warn", `[${key.toUpperCase()}] Auto-unwrap notice: ${err.message}`);
+      }
+    }
   }
 
   /**
@@ -381,19 +402,20 @@ export class ArbitrageGmaiEngine extends EventEmitter {
 
     this.log("success", `[${walletKey}] Leg 2 Confirmed! Gross Out: ${actualSdaOut.toFixed(5)} WSDA | Realized Net: +${realizedNetProfit.toFixed(5)} SDA`);
 
-    // 6. ALLOCATE 40% OF NET PROFIT TO GMAI LIQUIDITY
-    let sdaBanked = realizedNetProfit;
+    // 6. ALLOCATE 10% TO GMAI LIQUIDITY POOL AND RETAIN 90% IN EXECUTING WALLET
     let sdaToGmaiLp = 0;
+    let sdaRetained = 0;
     let gmaiAcquired = 0n;
+    const lpPct = Math.round(this.gmaiProfitRatio * 100);
 
     if (realizedNetProfit > 0) {
-      sdaToGmaiLp = realizedNetProfit * this.gmaiProfitRatio;
-      sdaBanked = realizedNetProfit * (1 - this.gmaiProfitRatio);
+      sdaToGmaiLp = realizedNetProfit * this.gmaiProfitRatio; // 10% to GMAI Liquidity Pool
+      sdaRetained = realizedNetProfit * (1 - this.gmaiProfitRatio); // 90% retained in executing wallet
 
       const sdaGmaiWei = ethers.parseEther(sdaToGmaiLp.toFixed(18));
       if (sdaGmaiWei > 100000000000000n) { // > 0.0001 SDA
         try {
-          this.log("info", `[${walletKey}] 🚀 ROUTING 40% PROFIT (+${sdaToGmaiLp.toFixed(5)} SDA) TO GMAI LIQUIDITY...`);
+          this.log("info", `[${walletKey}] 🚀 ROUTING ${lpPct}% PROFIT (+${sdaToGmaiLp.toFixed(5)} SDA) TO GMAI LIQUIDITY POOL...`);
           const gmaiBalBefore = await gmai.balanceOf(signer.address);
           const nonceLp = await waitForCleanNonce(this.provider, signer.address);
 
@@ -412,32 +434,47 @@ export class ArbitrageGmaiEngine extends EventEmitter {
           const gmaiBalAfter = await gmai.balanceOf(signer.address);
           gmaiAcquired = gmaiBalAfter - gmaiBalBefore;
 
-          this.log("success", `[${walletKey}] 💧 GMAI LIQUIDITY BOOSTED: Injected ${sdaToGmaiLp.toFixed(5)} WSDA into Pool | Acquired +${ethers.formatEther(gmaiAcquired)} GMAI (Tx: ${lpTx.hash.slice(0, 16)}...)`);
+          this.log("success", `[${walletKey}] 💧 GMAI LIQUIDITY INJECTION: Injected ${sdaToGmaiLp.toFixed(5)} WSDA | Acquired +${ethers.formatEther(gmaiAcquired)} GMAI (Tx: ${lpTx.hash.slice(0, 16)}...)`);
         } catch (errLp) {
-          this.log("error", `[${walletKey}] Failed routing 40% profit to GMAI LP: ${errLp.message}`);
+          this.log("error", `[${walletKey}] Failed routing ${lpPct}% profit to GMAI Liquidity Pool: ${errLp.message}`);
         }
+      }
+
+      // 7. Auto-unwrap remaining WSDA (Principal + 50% Retained Profit) directly in wallet
+      if (this.unwrapWsda) {
+        try {
+          const wsdaBalToUnwrap = await wsda.balanceOf(signer.address);
+          if (wsdaBalToUnwrap > 0n) {
+            const nonceUnwrap = await waitForCleanNonce(this.provider, signer.address);
+            const unwrapTx = await wsda.withdraw(wsdaBalToUnwrap, { gasLimit: 85000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceUnwrap });
+            await unwrapTx.wait(1);
+            this.log("success", `[${walletKey}] 💰 Retained ${ethers.formatEther(wsdaBalToUnwrap)} WSDA -> Native SDA in Wallet!`);
+          }
+        } catch (errUnwrap) {
+          this.log("warn", `[${walletKey}] Auto-unwrap notice: ${errUnwrap.message}`);
+        }
+      }
+    } else {
+      // If zero or negative, unwrap any residual WSDA
+      if (this.unwrapWsda) {
+        try {
+          const wsdaBalToUnwrap = await wsda.balanceOf(signer.address);
+          if (wsdaBalToUnwrap > 0n) {
+            const nonceUnwrap = await waitForCleanNonce(this.provider, signer.address);
+            const unwrapTx = await wsda.withdraw(wsdaBalToUnwrap, { gasLimit: 85000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceUnwrap });
+            await unwrapTx.wait(1);
+          }
+        } catch (errUnwrap) {}
       }
     }
 
-    // 7. Auto-unwrap the 60% banked profit + principal to native SDA for bankable liquidity
-    if (this.unwrapWsda) {
-      try {
-        const wsdaBalToUnwrap = await wsda.balanceOf(signer.address);
-        if (wsdaBalToUnwrap > 0n) {
-          const nonceUnwrap = await waitForCleanNonce(this.provider, signer.address);
-          const unwrapTx = await wsda.withdraw(wsdaBalToUnwrap, { gasLimit: 85000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceUnwrap });
-          await unwrapTx.wait(1);
-          this.log("success", `[${walletKey}] 💰 Banked ${ethers.formatEther(wsdaBalToUnwrap)} WSDA -> Native SDA in Wallet!`);
-        }
-      } catch (errUnwrap) {
-        this.log("warn", `[${walletKey}] Auto-unwrap notice: ${errUnwrap.message}`);
-      }
-    }
+    // Guarantee all profits across all wallets are held as native SDA token
+    await this.unwrapAllWallets();
 
     return {
       success: true,
       netProfitSda: realizedNetProfit,
-      sdaAccumulated: sdaBanked,
+      sdaAccumulated: sdaRetained,
       gmaiInjectedSda: sdaToGmaiLp,
       gmaiTokensAcquired: Number(ethers.formatEther(gmaiAcquired)),
       txHash: leg2Tx.hash
@@ -445,13 +482,16 @@ export class ArbitrageGmaiEngine extends EventEmitter {
   }
 
   /**
-   * Scans 42 tokens, finds all arbitrage opportunities, and executes the best route per token
+   * Scans 43 tokens, finds all arbitrage opportunities, and executes the best route per token
    */
   async runScanRound(roundNumber) {
     if (this.isExecutingScan) return;
     this.isExecutingScan = true;
 
-    this.log("info", `🔍 [ROUND #${roundNumber}] Scanning 42 Ecosystem Contracts across fee tiers (500, 3000, 10000)...`);
+    // Pre-flight check: auto-convert any stranded WSDA to native SDA token across all fleet wallets
+    await this.unwrapAllWallets();
+
+    this.log("info", `🔍 [ROUND #${roundNumber}] Scanning 43 Ecosystem Contracts across fee tiers (500, 3000, 10000)...`);
     const t0 = Date.now();
 
     try {
@@ -570,6 +610,7 @@ export class ArbitrageGmaiEngine extends EventEmitter {
     } catch (errScan) {
       this.log("error", `Market scan round error: ${errScan.message}`);
     } finally {
+      await this.unwrapAllWallets();
       this.isExecutingScan = false;
       this.stats.roundsScanned++;
       this.emit("stats", this.getStats());
@@ -581,8 +622,10 @@ export class ArbitrageGmaiEngine extends EventEmitter {
     this.isRunning = true;
     this.isTerminating = false;
 
-    this.log("info", `🚀 Starting 42-Token Arbitrage & GMAI LP Engine [Mode: ${this.isLive ? "LIVE BROADCAST" : "DRY-RUN SIMULATION"}]`);
-    this.log("info", `💧 Profit Distribution: 60% Banked Native SDA | 40% Routed to GMAI Liquidity Pool`);
+    const lpPct = Math.round(this.gmaiProfitRatio * 100);
+    const walletPct = 100 - lpPct;
+    this.log("info", `🚀 Starting 43-Token Scalper & Arbitrage Engine [Mode: ${this.isLive ? "LIVE BROADCAST" : "DRY-RUN SIMULATION"}]`);
+    this.log("info", `💧 Profit Allocation: ${lpPct}% Added to GMAI Liquidity Pool | ${walletPct}% Retained in Wallet as Native SDA`);
 
     let round = 1;
     while (this.isRunning && !this.isTerminating) {

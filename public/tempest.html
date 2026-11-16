@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIDRA TEMPEST (STAE) — Atomic Arbitrage & Security Command</title>
+  <style>
+    :root {
+      --bg-black: #05070b;
+      --bg-charcoal: #0c1018;
+      --bg-card: #111723;
+      --border-subtle: #1e293b;
+      --electric-blue: #00d4ff;
+      --subtle-green: #10b981;
+      --warn-amber: #f59e0b;
+      --danger-red: #ef4444;
+      --text-primary: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, monospace;
+      background: var(--bg-black);
+      color: var(--text-primary);
+      display: flex;
+      min-height: 100vh;
+    }
+    aside {
+      width: 260px;
+      background: var(--bg-charcoal);
+      border-right: 1px solid var(--border-subtle);
+      padding: 18px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .brand {
+      padding: 10px 12px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 8px;
+    }
+    .brand h1 {
+      font-size: 16px;
+      letter-spacing: 1.5px;
+      color: var(--electric-blue);
+    }
+    .brand p { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    .nav-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      text-align: left;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .nav-btn:hover, .nav-btn.active {
+      background: rgba(0, 212, 255, 0.09);
+      color: var(--electric-blue);
+      border-color: rgba(0, 212, 255, 0.25);
+    }
+    .nav-btn.danger { color: var(--danger-red); }
+    main {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.14);
+      color: var(--subtle-green);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+    .badge.blue {
+      background: rgba(0, 212, 255, 0.12);
+      color: var(--electric-blue);
+      border-color: rgba(0, 212, 255, 0.35);
+    }
+    .badge.red {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger-red);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .card h3 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .metric {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .metric.green { color: var(--subtle-green); }
+    .metric.blue { color: var(--electric-blue); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border-subtle);
+      text-align: left;
+    }
+    th { color: var(--text-muted); font-weight: 600; }
+    .btn {
+      background: var(--electric-blue);
+      color: #000;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .btn.stop { background: var(--danger-red); color: #fff; }
+    .page-section { display: none; }
+    .page-section.active { display: block; }
+    @media (max-width: 768px) {
+      body { flex-direction: column; }
+      aside { width: 100%; flex-direction: row; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <div class="brand">
+      <h1>🌩️ SIDRA TEMPEST</h1>
+      <p>STAE v1.0 • Chain ID 97453</p>
+    </div>
+    <button class="nav-btn active" onclick="showPage('p1', this)">1. Overview</button>
+    <button class="nav-btn" onclick="showPage('p2', this)">2. Live Market Scanner</button>
+    <button class="nav-btn" onclick="showPage('p3', this)">3. Arbitrage Opportunities</button>
+    <button class="nav-btn" onclick="showPage('p4', this)">4. Pool Explorer</button>
+    <button class="nav-btn" onclick="showPage('p5', this)">5. Route Optimizer</button>
+    <button class="nav-btn" onclick="showPage('p6', this)">6. Wallet Fleet</button>
+    <button class="nav-btn" onclick="showPage('p7', this)">7. Trade Execution</button>
+    <button class="nav-btn" onclick="showPage('p8', this)">8. Profit and Loss</button>
+    <button class="nav-btn" onclick="showPage('p9', this)">9. GMAI Allocation</button>
+    <button class="nav-btn" onclick="showPage('p10', this)">10. Risk Management</button>
+    <button class="nav-btn" onclick="showPage('p11', this)">11. Security Center</button>
+    <button class="nav-btn" onclick="showPage('p12', this)">12. T3MP3ST Integration</button>
+    <button class="nav-btn" onclick="showPage('p13', this)">13. Transaction History</button>
+    <button class="nav-btn" onclick="showPage('p14', this)">14. System Settings</button>
+    <button class="nav-btn danger" onclick="showPage('p15', this)">15. Emergency Stop</button>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <div>
+        <span id="modeBadge" class="badge blue">SIMULATION / DRY-RUN DEFAULT</span>
+        <span id="rpcBadge" class="badge">DUAL-RPC VERIFIED</span>
+        <span id="riskBadge" class="badge">CIRCUIT BREAKER ARMED</span>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" onclick="triggerCycle()">⚡ Run Atomic Scan Cycle</button>
+        <button class="btn stop" onclick="triggerEmergencyStop(false)">🛑 Emergency Stop</button>
+      </div>
+    </div>
+
+    <div class="grid-4">
+      <div class="card">
+        <h3>Total Fleet Capital (SDA + WSDA)</h3>
+        <div class="metric blue" id="mTotalCap">-- SDA</div>
+        <small id="mSubCap" style="color:var(--text-muted)">Native + Pre-Wrapped WSDA</small>
+      </div>
+      <div class="card">
+        <h3>Realized Net Profit (On-Chain)</h3>
+        <div class="metric green" id="mRealizedProfit">+0.00000 SDA</div>
+        <small style="color:var(--text-muted)">Simulated profits strictly excluded</small>
+      </div>
+      <div class="card">
+        <h3>Gas Expenses / Win Rate</h3>
+        <div class="metric" id="mGasWin">0.0000 SDA / 100%</div>
+        <small style="color:var(--text-muted)">Atomic 1-Tx Router.exactInput</small>
+      </div>
+      <div class="card">
+        <h3>GMAI Ecosystem Balance</h3>
+        <div class="metric blue" id="mGmaiBal">-- GMAI</div>
+        <small style="color:var(--text-muted)">Mode A Accumulation Verified</small>
+      </div>
+    </div>
+
+    <div id="p1" class="page-section active card">
+      <h3>1. Executive Overview & Active Fleet Status</h3>
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+        Non-custodial AI-assisted cross-pool atomic arbitrage engine (`Router.exactInput` single-transaction execution). Private keys are isolated and never exposed.
+      </p>
+      <table id="overviewWalletsTable">
+        <thead><tr><th>Wallet</th><th>Address</th><th>Native SDA</th><th>Wrapped WSDA</th><th>Combined SDA</th><th>GMAI</th><th>Nonce Status</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="p2" class="page-section card"><h3>2. Live Market Scanner</h3><div id="scannerContent"></div></div>
+    <div id="p3" class="page-section card"><h3>3. Arbitrage Opportunities</h3><div id="oppsContent"></div></div>
+    <div id="p4" class="page-section card"><h3>4. Pool Explorer</h3><div id="poolsContent"></div></div>
+    <div id="p5" class="page-section card"><h3>5. Route Optimizer (Risk-Adjusted Ranking)</h3><div id="optimizerContent"></div></div>
+    <div id="p6" class="page-section card"><h3>6. Wallet Fleet Management</h3><div id="fleetContent"></div></div>
+    <div id="p7" class="page-section card"><h3>7. Atomic Trade Execution</h3><div id="execContent"></div></div>
+    <div id="p8" class="page-section card"><h3>8. Profit and Loss Statement (BigInt Reconciled)</h3><div id="pnlContent"></div></div>
+    <div id="p9" class="page-section card"><h3>9. GMAI Allocation Ledger (Mode A vs Mode B)</h3><div id="allocContent"></div></div>
+    <div id="p10" class="page-section card"><h3>10. Deterministic Risk Management</h3><div id="riskContent"></div></div>
+    <div id="p11" class="page-section card"><h3>11. Security Center</h3><div id="secContent"></div></div>
+    <div id="p12" class="page-section card"><h3>12. T3MP3ST Operational Assurance Integration</h3><div id="tempestContent"></div></div>
+    <div id="p13" class="page-section card"><h3>13. On-Chain & Simulated Transaction History</h3><div id="txContent"></div></div>
+    <div id="p14" class="page-section card"><h3>14. System Settings & Contract Configuration</h3><div id="settingsContent"></div></div>
+    <div id="p15" class="page-section card">
+      <h3>15. Emergency Stop & Circuit Breaker Override</h3>
+      <p style="margin:12px 0; font-size:13px; color:var(--text-muted);">
+        Immediately halts all trade execution across all 5 wallets while preserving pre-wrapped WSDA and Native SDA balances.
+      </p>
+      <button class="btn stop" onclick="triggerEmergencyStop(false)">🛑 TRIGGER IMMEDIATE EMERGENCY STOP</button>
+      <button class="btn" style="margin-left:10px;" onclick="triggerEmergencyStop(true)">🟢 Reset Circuit Breaker</button>
+    </div>
+  </main>
+
+  <script>
+    function showPage(id, btn) {
+      document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      if (btn) btn.classList.add('active');
+    }
+
+    async function loadSnapshot() {
+      try {
+        const res = await fetch('/api/stae/snapshot');
+        const data = await res.json();
+        if (!data.ok) return;
+
+        const wallets = data.wallets || [];
+        let totNat = 0, totWsda = 0, totGmai = 0;
+        const tbody = document.querySelector('#overviewWalletsTable tbody');
+        tbody.innerHTML = '';
+
+        wallets.forEach(w => {
+          totNat += Number(w.nativeSda || 0);
+          totWsda += Number(w.wsda || 0);
+          totGmai += Number(w.gmai || 0);
+          tbody.innerHTML += `<tr>
+            <td><b>${w.walletId.toUpperCase()}</b></td>
+            <td><code>${w.address}</code></td>
+            <td>${Number(w.nativeSda).toFixed(4)} SDA</td>
+            <td>${Number(w.wsda).toFixed(4)} WSDA</td>
+            <td><b>${Number(w.combinedSda).toFixed(4)} SDA</b></td>
+            <td>${Number(w.gmai).toLocaleString(undefined, {maximumFractionDigits:2})}</td>
+            <td>${w.isCleanNonce ? '<span class="badge">CLEAN (#'+w.nonce+')</span>' : '<span class="badge red">PENDING</span>'}</td>
+          </tr>`;
+        });
+
+        document.getElementById('mTotalCap').textContent = `${(totNat + totWsda).toFixed(4)} SDA`;
+        document.getElementById('mSubCap').textContent = `Native: ${totNat.toFixed(2)} SDA | Wrapped: ${totWsda.toFixed(2)} WSDA`;
+        document.getElementById('mGmaiBal').textContent = `${totGmai.toLocaleString(undefined, {maximumFractionDigits:0})} GMAI`;
+
+        const rm = data.riskMetrics || {};
+        document.getElementById('mRealizedProfit').textContent = `+${Number(rm.realizedNetProfitSda || 0).toFixed(5)} SDA`;
+        document.getElementById('mGasWin').textContent = `${Number(rm.totalGasSpentSda || 0).toFixed(4)} SDA / ${rm.winRatePct ?? 100}%`;
+
+        const pools = data.poolRegistry || [];
+        document.getElementById('scannerContent').innerHTML = `<p>Tracked Pools: ${pools.length} | Healthy Pools: ${pools.filter(p=>p.isHealthy).length}</p>`;
+        document.getElementById('poolsContent').innerHTML = `<table><thead><tr><th>Token</th><th>Fee Tier</th><th>Pool Address</th><th>Virtual WSDA Depth</th><th>Spot Price (SDA)</th></tr></thead><tbody>` +
+          pools.filter(p=>p.isHealthy).slice(0, 30).map(p => `<tr><td>${p.tokenSymbol}</td><td>${p.feeTier}</td><td><code>${p.poolAddress}</code></td><td>${Number(p.virtualWsdaDepthSda).toFixed(2)} SDA</td><td>${Number(p.spotPriceSda).toFixed(6)}</td></tr>`).join('') + `</tbody></table>`;
+
+        const opps = data.recentOpportunities || [];
+        const oppHtml = `<table><thead><tr><th>Token</th><th>Strategy</th><th>Fees</th><th>Size</th><th>Expected Net</th><th>Impact</th><th>Decision</th></tr></thead><tbody>` +
+          opps.slice(0, 20).map(o => `<tr><td><b>${o.tokenSymbol}</b></td><td>${o.strategyType}</td><td>${o.feeBuy}➔${o.feeSell}</td><td>${(Number(o.inputSdaWei)/1e18).toFixed(2)} SDA</td><td>+${(Number(o.expectedNetProfitWei)/1e18).toFixed(5)} SDA</td><td>${Number(o.priceImpactPct).toFixed(2)}%</td><td>${o.riskDecision}</td></tr>`).join('') + `</tbody></table>`;
+        document.getElementById('oppsContent').innerHTML = oppHtml;
+        document.getElementById('optimizerContent').innerHTML = oppHtml;
+        document.getElementById('fleetContent').innerHTML = document.getElementById('overviewWalletsTable').outerHTML;
+
+        const txs = data.recentTransactions || [];
+        const txHtml = `<table><thead><tr><th>Mode</th><th>Wallet</th><th>Token</th><th>In (SDA)</th><th>MinOut Guard</th><th>Net Profit</th><th>Status</th><th>Tx Hash</th></tr></thead><tbody>` +
+          txs.slice(0, 25).map(t => `<tr><td>${t.executionMode}</td><td>${t.walletId}</td><td>${t.tokenSymbol}</td><td>${(Number(t.amountInWei)/1e18).toFixed(2)}</td><td>${(Number(t.amountOutMinWei)/1e18).toFixed(4)}</td><td>+${(Number(t.realizedNetProfitWei)/1e18).toFixed(5)} SDA</td><td>${t.status}</td><td><code>${String(t.txHash).slice(0,18)}...</code></td></tr>`).join('') + `</tbody></table>`;
+        document.getElementById('txContent').innerHTML = txHtml;
+        document.getElementById('execContent').innerHTML = txHtml;
+        document.getElementById('pnlContent').innerHTML = `<pre>${JSON.stringify(rm, null, 2)}</pre>`;
+        document.getElementById('allocContent').innerHTML = `<pre>${JSON.stringify(data.recentAllocations || [], null, 2)}</pre>`;
+        document.getElementById('riskContent').innerHTML = `<pre>${JSON.stringify({ riskMetrics: rm, riskConfig: data.riskConfig }, null, 2)}</pre>`;
+        document.getElementById('secContent').innerHTML = `<pre>${JSON.stringify(data.securityReport?.findings || [], null, 2)}</pre>`;
+        document.getElementById('tempestContent').innerHTML = `<pre>${JSON.stringify(data.securityReport || {}, null, 2)}</pre>`;
+        document.getElementById('settingsContent').innerHTML = `<pre>${JSON.stringify(data.riskConfig || {}, null, 2)}</pre>`;
+      } catch (e) {}
+    }
+
+    async function triggerCycle() {
+      await fetch('/api/stae/cycle', { method: 'POST' });
+      await loadSnapshot();
+    }
+
+    async function triggerEmergencyStop(reset) {
+      await fetch('/api/stae/emergency-stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset })
+      });
+      await loadSnapshot();
+    }
+
+    loadSnapshot();
+    setInterval(loadSnapshot, 5000);
+  </script>
+</body>
+</html>
+

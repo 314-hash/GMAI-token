@@ -11,8 +11,13 @@ package-lock.json.backup
 *.keystore
 secrets/
 
-# Embedded / External Subprojects
+# Embedded / External Subprojects & Vendors
 showcase-repo/
+vendor/
+
+# Fleet Runtime State & Mutex Locks
+data/wallet_locks/
+*.jsonl
 
 # Logs & Runtime
 logs/
