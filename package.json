@@ -59,7 +59,11 @@
     "unstick": "node .\\scripts\\unstick_wallet.js",
     "unstick:fix": "node .\\scripts\\unstick_wallet.js --clear",
     "mega:live": "node --dns-result-order=ipv4first ./scripts/mega_fleet_automation.js --live",
-    "mega:dry": "node --dns-result-order=ipv4first ./scripts/mega_fleet_automation.js"
+    "mega:dry": "node --dns-result-order=ipv4first ./scripts/mega_fleet_automation.js",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "worker:dry": "wrangler deploy --dry-run",
+    "worker:tail": "wrangler tail"
   },
   "keywords": [
     "sidra",
@@ -74,5 +78,8 @@
   "dependencies": {
     "dotenv": "^18.0.5",
     "ethers": "^6.17.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.162.0"
   }
 }

@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 package-lock.json.backup
+.wrangler/
 
 # Environment Variables & Sensitive Keys (CRITICAL: Do NOT remove)
 .env

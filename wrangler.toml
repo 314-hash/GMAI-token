@@ -1,0 +1,19 @@
+name = "gmai-autonomous-fleet"
+main = "worker/index.js"
+compatibility_date = "2026-11-16"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["* * * * *"] # 24/7 Heartbeat (Every 1 minute)
+
+[vars]
+RPC_URL = "https://rpc.sidrachain.com"
+CHAIN_ID = "97453"
+ROUTER_ADDRESS = "0x35cAC72Db00e8dAC0e4f7F8A0F53D339E0cC23fb"
+FACTORY_ADDRESS = "0xCFE41fb5dA87916D84E7F22889087b4Ff7163cDE"
+WSDA_ADDRESS = "0xE4095a910209D7BE03B55D02F40d4554B1666182"
+GMAI_ADDRESS = "0x4765561e63914E72168bBd2A7e2ce72F9057ca04"
+GMAI_POOL_FEE = "10000"
+MIN_PROFIT_SDA = "0.0001"
+TRADE_SIZE_SDA = "1.5"
+LIVE_EXECUTION = "false"
