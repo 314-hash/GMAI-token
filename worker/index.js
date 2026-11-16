@@ -256,6 +256,10 @@ async function executeAutonomousCycle(env) {
   const wsdaAddr = env.WSDA_ADDRESS || "0xE4095a910209D7BE03B55D02F40d4554B1666182";
   const gmaiAddr = env.GMAI_ADDRESS || "0x4765561e63914E72168bBd2A7e2ce72F9057ca04";
   const gmaiFee = Number(env.GMAI_POOL_FEE || 10000);
+  const bandiqAddr = env.BANDIQ_ADDRESS || "0x6d1537bEE4F1EE3f55F4BC9319Aa40252cd39133";
+  const bandiqFee = Number(env.BANDIQ_POOL_FEE || 10000);
+  const svmAddr = env.SVM_ADDRESS || "0xFB1267FB3b9BdbcE3a1C30A9B0A1454e14E81ACb";
+  const svmFee = Number(env.SVM_POOL_FEE || 3000);
   const isLive = env.LIVE_EXECUTION === "true";
 
   const scan = await scanMarketOpportunities(provider, env);
@@ -354,11 +358,12 @@ async function executeAutonomousCycle(env) {
     const gasSpentSda = Number(ethers.formatEther(receipt.gasUsed * receipt.gasPrice));
     console.log(`✅ [CONFIRMED] Block ${receipt.blockNumber} | Gas Spent: -${gasSpentSda.toFixed(5)} SDA`);
 
-    // 4. 10% Liquidity Reinvestment into GMAI Pool
+    // 4. Ecosystem Flywheel: 10% GMAI + 5% BANDIQ + 5% SVM Pool Injection (80% Kept in Wallet)
     if (bestOpp.expectedProfitSda > 0) {
-      const lpProfitSda = bestOpp.expectedProfitSda * 0.10;
-      const lpWei = ethers.parseEther(lpProfitSda.toFixed(18));
-      if (lpWei >= 100000000000000n) {
+      // 1) 10% GMAI Injection
+      const gmaiLpSda = bestOpp.expectedProfitSda * 0.10;
+      const gmaiWei = ethers.parseEther(gmaiLpSda.toFixed(18));
+      if (gmaiWei >= 100000000000000n) {
         try {
           const lpTx = await router.exactInputSingle({
             tokenIn: wsdaAddr,
@@ -366,14 +371,58 @@ async function executeAutonomousCycle(env) {
             fee: gmaiFee,
             recipient: signer.address,
             deadline,
-            amountIn: lpWei,
+            amountIn: gmaiWei,
             amountOutMinimum: 0n,
             sqrtPriceLimitX96: 0
           }, { gasLimit: 250000n });
           await lpTx.wait(1);
-          console.log(`💧 [GMAI FLYWHEEL] Injected +${lpProfitSda.toFixed(5)} SDA into GMAI Pool! (Tx: ${lpTx.hash})`);
+          console.log(`💧 [GMAI FLYWHEEL] Injected +${gmaiLpSda.toFixed(5)} SDA into GMAI Pool! (Tx: ${lpTx.hash})`);
         } catch (lpErr) {
           console.warn("GMAI LP injection note:", lpErr.message);
+        }
+      }
+
+      // 2) 5% BANDIQ Injection
+      const bandiqLpSda = bestOpp.expectedProfitSda * 0.05;
+      const bandiqWei = ethers.parseEther(bandiqLpSda.toFixed(18));
+      if (bandiqWei >= 100000000000000n) {
+        try {
+          const lpTx = await router.exactInputSingle({
+            tokenIn: wsdaAddr,
+            tokenOut: bandiqAddr,
+            fee: bandiqFee,
+            recipient: signer.address,
+            deadline,
+            amountIn: bandiqWei,
+            amountOutMinimum: 0n,
+            sqrtPriceLimitX96: 0
+          }, { gasLimit: 250000n });
+          await lpTx.wait(1);
+          console.log(`💧 [BANDIQ FLYWHEEL] Injected +${bandiqLpSda.toFixed(5)} SDA into BANDIQ Pool! (Tx: ${lpTx.hash})`);
+        } catch (lpErr) {
+          console.warn("BANDIQ LP injection note:", lpErr.message);
+        }
+      }
+
+      // 3) 5% SVM Injection
+      const svmLpSda = bestOpp.expectedProfitSda * 0.05;
+      const svmWei = ethers.parseEther(svmLpSda.toFixed(18));
+      if (svmWei >= 100000000000000n) {
+        try {
+          const lpTx = await router.exactInputSingle({
+            tokenIn: wsdaAddr,
+            tokenOut: svmAddr,
+            fee: svmFee,
+            recipient: signer.address,
+            deadline,
+            amountIn: svmWei,
+            amountOutMinimum: 0n,
+            sqrtPriceLimitX96: 0
+          }, { gasLimit: 250000n });
+          await lpTx.wait(1);
+          console.log(`💧 [SVM FLYWHEEL] Injected +${svmLpSda.toFixed(5)} SDA into SVM Pool! (Tx: ${lpTx.hash})`);
+        } catch (lpErr) {
+          console.warn("SVM LP injection note:", lpErr.message);
         }
       }
     }

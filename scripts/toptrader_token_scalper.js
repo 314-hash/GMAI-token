@@ -23,9 +23,21 @@ provider.pollingInterval = 500;
 const ROUTER_ADDR = ethers.getAddress(process.env.ROUTER_ADDRESS || "0x35cAC72Db00e8dAC0e4f7F8A0F53D339E0cC23fb");
 const FACTORY_ADDR = ethers.getAddress(process.env.FACTORY_ADDRESS || "0xCFE41fb5dA87916D84E7F22889087b4Ff7163cDE");
 const WSDA_ADDR = ethers.getAddress(process.env.WSDA_ADDRESS || "0xE4095a910209D7BE03B55D02F40d4554B1666182");
-const GMAI_ADDR = ethers.getAddress(process.env.TARGET_TOKEN_ADDRESS || process.env.GMAI_ADDRESS || "0x4765561e63914E72168bBd2A7e2ce72F9057ca04");
+
+// Ecosystem LP Flywheel: 10% GMAI + 5% BANDIQ + 5% SVM (80% Kept in Wallet)
+const GMAI_ADDR = ethers.getAddress(process.env.GMAI_ADDRESS || "0x4765561e63914E72168bBd2A7e2ce72F9057ca04");
 const GMAI_POOL_FEE = Number(process.env.GMAI_POOL_FEE || "10000");
-const DEFAULT_LP_SHARE = 0.10; // 10% liquidity profit reinvested into GMAI pool
+
+const BANDIQ_ADDR = ethers.getAddress(process.env.BANDIQ_ADDRESS || "0x6d1537bEE4F1EE3f55F4BC9319Aa40252cd39133");
+const BANDIQ_POOL_FEE = Number(process.env.BANDIQ_POOL_FEE || "10000");
+
+const SVM_ADDR = ethers.getAddress(process.env.SVM_ADDRESS || "0xFB1267FB3b9BdbcE3a1C30A9B0A1454e14E81ACb");
+const SVM_POOL_FEE = Number(process.env.SVM_POOL_FEE || "3000");
+
+const GMAI_LP_SHARE = Number(process.env.GMAI_LP_SHARE || "0.10");     // 10% liquidity reinvested into GMAI
+const BANDIQ_LP_SHARE = Number(process.env.BANDIQ_LP_SHARE || "0.05"); // 5% liquidity reinvested into BANDIQ
+const SVM_LP_SHARE = Number(process.env.SVM_LP_SHARE || "0.05");       // 5% liquidity reinvested into SVM
+const DEFAULT_LP_SHARE = 0.20; // 20% total ecosystem pool injection (80% kept by wallet)
 
 // The 14 Top-Trader Targets
 export const TARGET_WALLETS = [
@@ -376,8 +388,9 @@ async function executeScalpTrade({
     });
     const estProfit = Number(ethers.formatEther(liveOut - tradeAmountWei));
     if (estProfit <= 0.000001) return { success: false, reason: "ZERO_PROFIT_SIMULATION", walletKey };
-  } catch {
-    return { success: false, reason: "STATIC_CALL_REJECTED", walletKey };
+  } catch (err) {
+    const reasonMsg = err.reason || err.shortMessage || (err.message?.includes("Too little received") ? "Too little received (Pool slippage / low tick depth)" : err.message?.slice(0, 80)) || "STATIC_CALL_REJECTED";
+    return { success: false, reason: reasonMsg, walletKey };
   }
 
   // 4. Broadcast Scalp Execution with Cross-Window Lock
@@ -404,30 +417,88 @@ async function executeScalpTrade({
     const gasSpentSda = Number(ethers.formatEther(gasSpentWei));
     const netProfitSda = grossDelta - gasSpentSda;
 
-    let lpProfitSda = 0.0;
-    if (netProfitSda > 0 && lpShare > 0) {
-      lpProfitSda = netProfitSda * lpShare;
-      const lpShareWei = ethers.parseEther(lpProfitSda.toFixed(18));
-      if (lpShareWei >= 100000000000000n) {
-        try {
-          const nonceLp = await getFastNonce(signer.address);
-          const lpTx = await router.exactInputSingle({
-            tokenIn: WSDA_ADDR,
-            tokenOut: GMAI_ADDR,
-            fee: GMAI_POOL_FEE,
-            recipient: signer.address,
-            deadline: Math.floor(Date.now() / 1000) + 180,
-            amountIn: lpShareWei,
-            amountOutMinimum: 0n,
-            sqrtPriceLimitX96: 0
-          }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
-          await lpTx.wait(1);
-          console.log(`   💧 [${walletKey}] 10% Profit Injected into GMAI Pool: +${lpProfitSda.toFixed(5)} SDA ➔ GMAI (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
-        } catch (lpErr) {
-          console.warn(`   ⚠️ [${walletKey}] GMAI liquidity injection skipped: ${lpErr.message}`);
+    let gmaiLpSda = 0.0;
+    let bandiqLpSda = 0.0;
+    let svmLpSda = 0.0;
+
+    if (netProfitSda > 0) {
+      // 1) 10% Profit Injected into GMAI Pool
+      if (GMAI_LP_SHARE > 0) {
+        gmaiLpSda = netProfitSda * GMAI_LP_SHARE;
+        const lpShareWei = ethers.parseEther(gmaiLpSda.toFixed(18));
+        if (lpShareWei >= 100000000000000n) {
+          try {
+            const nonceLp = await getFastNonce(signer.address);
+            const lpTx = await router.exactInputSingle({
+              tokenIn: WSDA_ADDR,
+              tokenOut: GMAI_ADDR,
+              fee: GMAI_POOL_FEE,
+              recipient: signer.address,
+              deadline: Math.floor(Date.now() / 1000) + 180,
+              amountIn: lpShareWei,
+              amountOutMinimum: 0n,
+              sqrtPriceLimitX96: 0
+            }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
+            await lpTx.wait(1);
+            console.log(`   💧 [${walletKey}] 10% Profit Injected into GMAI Pool: +${gmaiLpSda.toFixed(5)} SDA ➔ GMAI (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
+          } catch (lpErr) {
+            console.warn(`   ⚠️ [${walletKey}] GMAI liquidity injection skipped: ${lpErr.message}`);
+          }
+        }
+      }
+
+      // 2) 5% Profit Injected into BANDIQ Pool (0xB11551A7...)
+      if (BANDIQ_LP_SHARE > 0) {
+        bandiqLpSda = netProfitSda * BANDIQ_LP_SHARE;
+        const lpShareWei = ethers.parseEther(bandiqLpSda.toFixed(18));
+        if (lpShareWei >= 100000000000000n) {
+          try {
+            const nonceLp = await getFastNonce(signer.address);
+            const lpTx = await router.exactInputSingle({
+              tokenIn: WSDA_ADDR,
+              tokenOut: BANDIQ_ADDR,
+              fee: BANDIQ_POOL_FEE,
+              recipient: signer.address,
+              deadline: Math.floor(Date.now() / 1000) + 180,
+              amountIn: lpShareWei,
+              amountOutMinimum: 0n,
+              sqrtPriceLimitX96: 0
+            }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
+            await lpTx.wait(1);
+            console.log(`   💧 [${walletKey}] 5% Profit Injected into BANDIQ Pool: +${bandiqLpSda.toFixed(5)} SDA ➔ BANDIQ (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
+          } catch (lpErr) {
+            console.warn(`   ⚠️ [${walletKey}] BANDIQ liquidity injection skipped: ${lpErr.message}`);
+          }
+        }
+      }
+
+      // 3) 5% Profit Injected into SVM Pool (0x341C9103...)
+      if (SVM_LP_SHARE > 0) {
+        svmLpSda = netProfitSda * SVM_LP_SHARE;
+        const lpShareWei = ethers.parseEther(svmLpSda.toFixed(18));
+        if (lpShareWei >= 100000000000000n) {
+          try {
+            const nonceLp = await getFastNonce(signer.address);
+            const lpTx = await router.exactInputSingle({
+              tokenIn: WSDA_ADDR,
+              tokenOut: SVM_ADDR,
+              fee: SVM_POOL_FEE,
+              recipient: signer.address,
+              deadline: Math.floor(Date.now() / 1000) + 180,
+              amountIn: lpShareWei,
+              amountOutMinimum: 0n,
+              sqrtPriceLimitX96: 0
+            }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
+            await lpTx.wait(1);
+            console.log(`   💧 [${walletKey}] 5% Profit Injected into SVM Pool: +${svmLpSda.toFixed(5)} SDA ➔ SVM (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
+          } catch (lpErr) {
+            console.warn(`   ⚠️ [${walletKey}] SVM liquidity injection skipped: ${lpErr.message}`);
+          }
         }
       }
     }
+
+    const totalLpProfitSda = gmaiLpSda + bandiqLpSda + svmLpSda;
 
     // Auto-Unwrap excess WSDA profits beyond base working capital (W1-5: 100, W6-10: 10, W11-15: 5)
     const wNum = parseInt(walletKey.replace("wallet", ""), 10);
@@ -451,7 +522,7 @@ async function executeScalpTrade({
       }
     }
 
-    console.log(`   💰 [${walletKey}] ${modeLabel} | Gross: +${grossDelta.toFixed(5)} SDA | Gas: -${gasSpentSda.toFixed(5)} SDA | Net: +${netProfitSda.toFixed(5)} SDA | 💧 10% GMAI: +${lpProfitSda.toFixed(5)} SDA (Tx: https://ledger.sidrachain.com/tx/${tx.hash})`);
+    console.log(`   💰 [${walletKey}] ${modeLabel} | Gross: +${grossDelta.toFixed(5)} SDA | Gas: -${gasSpentSda.toFixed(5)} SDA | Net: +${netProfitSda.toFixed(5)} SDA | 💧 Injected 20% (10% GMAI, 5% BANDIQ, 5% SVM): +${totalLpProfitSda.toFixed(5)} SDA (Tx: https://ledger.sidrachain.com/tx/${tx.hash})`);
 
     return {
       success: true,
@@ -460,7 +531,10 @@ async function executeScalpTrade({
       grossDelta,
       gasSpentSda,
       netProfitSda,
-      lpProfitSda
+      lpProfitSda: totalLpProfitSda,
+      gmaiLpSda,
+      bandiqLpSda,
+      svmLpSda
     };
   } catch (err) {
     return { success: false, reason: err.message, walletKey };
@@ -782,60 +856,99 @@ async function main() {
         }
 
         if (candidateScalps.length > 0) {
-          const bestScalp = candidateScalps[0];
-          const actualTradeSize = bestScalp.tradeSizeSda || tradeSizeSda;
-          console.log(`\n⚡ [TOP GAINER / LOSER SCALP DETECTED] Scalping ${bestScalp.name}:`);
-          console.log(`   • Expected Net Profit : +${bestScalp.expectedProfitSda.toFixed(5)} SDA`);
-          console.log(`   • Executing Wallets   : ${eligibleKeys.join(", ")} (${(actualTradeSize * eligibleKeys.length).toFixed(2)} SDA Total Wave)`);
+          // Pre-verify with on-chain staticCall to select an executable route & size (0 gas wasted)
+          const testSigner = swarmWallets[eligibleKeys[0]];
+          let verifiedScalp = null;
 
-          const scalpResults = await Promise.all(
-            eligibleKeys.map((wKey, idx) =>
-              executeScalpTrade({
-                walletKey: wKey,
-                signer: swarmWallets[wKey],
-                route: bestScalp,
-                modeLabel: `TOP MOVER SCALP (${actualTradeSize.toFixed(1)} SDA)`,
-                isLive,
-                tradeSizeSda: actualTradeSize,
-                lpShare,
-                staggerMs: idx * 60
-              })
-            )
-          );
-
-          sessionWavesCount++;
-          let waveGross = 0.0;
-          let waveNet = 0.0;
-          let waveGas = 0.0;
-          let waveLp = 0.0;
-          let waveSuccess = 0;
-
-          for (const r of scalpResults) {
-            if (r && r.success) {
-              waveGross += r.grossDelta || 0;
-              waveNet += r.netProfitSda || 0;
-              waveGas += r.gasSpentSda || 0;
-              waveLp += r.lpProfitSda || 0;
-              waveSuccess++;
+          for (const cand of candidateScalps) {
+            const checkSizes = [cand.tradeSizeSda || tradeSizeSda, 1.5, 1.0, 0.5].filter((s, idx, arr) => s > 0 && arr.indexOf(s) === idx);
+            for (const s of checkSizes) {
+              try {
+                const sWei = ethers.parseEther(s.toFixed(18));
+                const routerContract = new ethers.Contract(ROUTER_ADDR, ROUTER_ABI, testSigner || provider);
+                const out = await routerContract.exactInput.staticCall({
+                  path: cand.path,
+                  recipient: testSigner?.address || WSDA_ADDR,
+                  deadline: Math.floor(Date.now() / 1000) + 120,
+                  amountIn: sWei,
+                  amountOutMinimum: sWei + 1n
+                }, testSigner ? { from: testSigner.address } : {});
+                const net = Number(ethers.formatEther(out - sWei));
+                if (net >= 0.0001) {
+                  verifiedScalp = { ...cand, tradeSizeSda: s, expectedProfitSda: net };
+                  break;
+                }
+              } catch {}
             }
+            if (verifiedScalp) break;
           }
 
-          sessionGrossProfitSda += waveGross;
-          sessionNetProfitSda += waveNet;
-          sessionGasSpentSda += waveGas;
-          sessionGmaiLpInjectedSda += waveLp;
-          sessionTradesExecuted += waveSuccess;
+          if (verifiedScalp) {
+            const actualTradeSize = verifiedScalp.tradeSizeSda;
+            console.log(`\n⚡ [TOP GAINER / LOSER SCALP VERIFIED ON-CHAIN] Scalping ${verifiedScalp.name}:`);
+            console.log(`   • Expected Net Profit : +${verifiedScalp.expectedProfitSda.toFixed(5)} SDA`);
+            console.log(`   • Verified Trade Size : ${actualTradeSize.toFixed(2)} SDA per wallet`);
+            console.log(`   • Executing Wallets   : ${eligibleKeys.join(", ")} (${(actualTradeSize * eligibleKeys.length).toFixed(2)} SDA Total Wave)`);
 
-          console.log(`\n==========================================================================`);
-          console.log(`📊 [WAVE #${sessionWavesCount} LIVE SCALP RECAP]`);
-          console.log(`   • Trades Confirmed in Wave  : ${waveSuccess} / ${eligibleKeys.length}`);
-          console.log(`   • Wave Gross SDA Profit     : ${waveGross >= 0 ? "+" : ""}${waveGross.toFixed(5)} SDA`);
-          console.log(`   • Wave Net Realized Profit  : ${waveNet >= 0 ? "+" : ""}${waveNet.toFixed(5)} SDA`);
-          console.log(`   • 💧 10% Injected to GMAI   : +${waveLp.toFixed(5)} SDA`);
-          console.log(`   • TOTAL SESSION GROSS PROFIT: ${sessionGrossProfitSda >= 0 ? "+" : ""}${sessionGrossProfitSda.toFixed(5)} SDA`);
-          console.log(`   • TOTAL SESSION NET PROFIT  : ${sessionNetProfitSda >= 0 ? "+" : ""}${sessionNetProfitSda.toFixed(5)} SDA`);
-          console.log(`   • 💧 GMAI POOL LIQUIDITY    : +${sessionGmaiLpInjectedSda.toFixed(5)} SDA`);
-          console.log(`==========================================================================\n`);
+            const scalpResults = await Promise.all(
+              eligibleKeys.map((wKey, idx) =>
+                executeScalpTrade({
+                  walletKey: wKey,
+                  signer: swarmWallets[wKey],
+                  route: verifiedScalp,
+                  modeLabel: `TOP MOVER SCALP (${actualTradeSize.toFixed(2)} SDA)`,
+                  isLive,
+                  tradeSizeSda: actualTradeSize,
+                  lpShare,
+                  staggerMs: idx * 60
+                })
+              )
+            );
+
+            sessionWavesCount++;
+            let waveGross = 0.0;
+            let waveNet = 0.0;
+            let waveGas = 0.0;
+            let waveLp = 0.0;
+            let waveGmai = 0.0;
+            let waveBand = 0.0;
+            let waveSvm = 0.0;
+            let waveSuccess = 0;
+
+            for (const r of scalpResults) {
+              if (r && r.success) {
+                waveGross += r.grossDelta || 0;
+                waveNet += r.netProfitSda || 0;
+                waveGas += r.gasSpentSda || 0;
+                waveLp += r.lpProfitSda || 0;
+                waveGmai += r.gmaiLpSda || 0;
+                waveBand += r.bandiqLpSda || 0;
+                waveSvm += r.svmLpSda || 0;
+                waveSuccess++;
+              } else if (r) {
+                console.log(`   ⚠️ [${r.walletKey}] Scalp skipped/reverted: ${r.reason || "Unknown"}`);
+              }
+            }
+
+            sessionGrossProfitSda += waveGross;
+            sessionNetProfitSda += waveNet;
+            sessionGasSpentSda += waveGas;
+            sessionGmaiLpInjectedSda += waveLp;
+            sessionTradesExecuted += waveSuccess;
+
+            console.log(`\n==========================================================================`);
+            console.log(`📊 [WAVE #${sessionWavesCount} LIVE SCALP RECAP]`);
+            console.log(`   • Trades Confirmed in Wave  : ${waveSuccess} / ${eligibleKeys.length}`);
+            console.log(`   • Wave Gross SDA Profit     : ${waveGross >= 0 ? "+" : ""}${waveGross.toFixed(5)} SDA`);
+            console.log(`   • Wave Net Realized Profit  : ${waveNet >= 0 ? "+" : ""}${waveNet.toFixed(5)} SDA (80% kept by wallets)`);
+            console.log(`   • 💧 20% Injected into Pools: +${waveLp.toFixed(5)} SDA (GMAI 10%: +${waveGmai.toFixed(5)} | BANDIQ 5%: +${waveBand.toFixed(5)} | SVM 5%: +${waveSvm.toFixed(5)})`);
+            console.log(`   • TOTAL SESSION GROSS PROFIT: ${sessionGrossProfitSda >= 0 ? "+" : ""}${sessionGrossProfitSda.toFixed(5)} SDA`);
+            console.log(`   • TOTAL SESSION NET PROFIT  : ${sessionNetProfitSda >= 0 ? "+" : ""}${sessionNetProfitSda.toFixed(5)} SDA`);
+            console.log(`   • 💧 TOTAL ECOSYSTEM LP     : +${sessionGmaiLpInjectedSda.toFixed(5)} SDA`);
+            console.log(`==========================================================================\n`);
+          } else {
+            console.log(`⏳ [SCALPER RADAR] Block ${currentBlock} | Active Wallets: ${eligibleKeys.join(", ")} | Candidates checked: pool slippage exceeds threshold at current sizes. Capital 100% protected.`);
+          }
         } else {
           console.log(`⏳ [SCALPER RADAR] Block ${currentBlock} | Active Wallets: ${eligibleKeys.join(", ")} | Scanned Top 20 Gainers & Losers + Combination Spreads. Pools balanced (< +0.0001 SDA). Capital protected.`);
         }

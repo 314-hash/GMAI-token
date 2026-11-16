@@ -20,9 +20,21 @@ provider.pollingInterval = 500; // Sub-second polling for instant block reaction
 
 const ROUTER_ADDR = ethers.getAddress(process.env.ROUTER_ADDRESS || "0x35cAC72Db00e8dAC0e4f7F8A0F53D339E0cC23fb");
 const WSDA_ADDR = ethers.getAddress(process.env.WSDA_ADDRESS || "0xE4095a910209D7BE03B55D02F40d4554B1666182");
-const GMAI_ADDR = ethers.getAddress(process.env.TARGET_TOKEN_ADDRESS || process.env.GMAI_ADDRESS || "0x4765561e63914E72168bBd2A7e2ce72F9057ca04");
+
+// Ecosystem LP Flywheel: 10% GMAI + 5% BANDIQ + 5% SVM (80% Kept in Wallet)
+const GMAI_ADDR = ethers.getAddress(process.env.GMAI_ADDRESS || "0x4765561e63914E72168bBd2A7e2ce72F9057ca04");
 const GMAI_POOL_FEE = Number(process.env.GMAI_POOL_FEE || "10000");
-const DEFAULT_LP_SHARE = 0.10; // 10% liquidity profit reinvested into GMAI pool
+
+const BANDIQ_ADDR = ethers.getAddress(process.env.BANDIQ_ADDRESS || "0x6d1537bEE4F1EE3f55F4BC9319Aa40252cd39133");
+const BANDIQ_POOL_FEE = Number(process.env.BANDIQ_POOL_FEE || "10000");
+
+const SVM_ADDR = ethers.getAddress(process.env.SVM_ADDRESS || "0xFB1267FB3b9BdbcE3a1C30A9B0A1454e14E81ACb");
+const SVM_POOL_FEE = Number(process.env.SVM_POOL_FEE || "3000");
+
+const GMAI_LP_SHARE = Number(process.env.GMAI_LP_SHARE || "0.10");     // 10% liquidity reinvested into GMAI
+const BANDIQ_LP_SHARE = Number(process.env.BANDIQ_LP_SHARE || "0.05"); // 5% liquidity reinvested into BANDIQ
+const SVM_LP_SHARE = Number(process.env.SVM_LP_SHARE || "0.05");       // 5% liquidity reinvested into SVM
+const DEFAULT_LP_SHARE = 0.20; // 20% total ecosystem pool injection (80% kept by wallet)
 
 // THE TARGET TOP-TRADER WALLETS TO COPY ON PINETSWAP
 export const TARGET_WALLETS = [
@@ -468,35 +480,92 @@ async function executeCopyTrade({
     const gasSpentSda = Number(ethers.formatEther(gasSpentWei));
     const netProfitSda = grossDelta - gasSpentSda;
 
-    let lpProfitSda = 0.0;
-    const activeLpShare = copyConfig.lpShare ?? DEFAULT_LP_SHARE;
-    if (netProfitSda > 0 && activeLpShare > 0) {
-      lpProfitSda = netProfitSda * activeLpShare;
-      const lpShareWei = ethers.parseEther(lpProfitSda.toFixed(18));
-      if (lpShareWei >= 100000000000000n) {
-        try {
-          const nonceLp = await getFastNonce(signer.address);
-          const lpTx = await router.exactInputSingle({
-            tokenIn: WSDA_ADDR,
-            tokenOut: GMAI_ADDR,
-            fee: GMAI_POOL_FEE,
-            recipient: signer.address,
-            deadline: Math.floor(Date.now() / 1000) + 180,
-            amountIn: lpShareWei,
-            amountOutMinimum: 0n,
-            sqrtPriceLimitX96: 0
-          }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
-          await lpTx.wait(1);
-          console.log(`   💧 [${walletKey}] 10% Profit Injected into GMAI Pool: +${lpProfitSda.toFixed(5)} SDA ➔ GMAI (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
-        } catch (lpErr) {
-          console.warn(`   ⚠️ [${walletKey}] GMAI liquidity injection skipped: ${lpErr.message}`);
+    let gmaiLpSda = 0.0;
+    let bandiqLpSda = 0.0;
+    let svmLpSda = 0.0;
+
+    if (netProfitSda > 0) {
+      // 1) 10% Profit Injected into GMAI Pool
+      if (GMAI_LP_SHARE > 0) {
+        gmaiLpSda = netProfitSda * GMAI_LP_SHARE;
+        const lpShareWei = ethers.parseEther(gmaiLpSda.toFixed(18));
+        if (lpShareWei >= 100000000000000n) {
+          try {
+            const nonceLp = await getFastNonce(signer.address);
+            const lpTx = await router.exactInputSingle({
+              tokenIn: WSDA_ADDR,
+              tokenOut: GMAI_ADDR,
+              fee: GMAI_POOL_FEE,
+              recipient: signer.address,
+              deadline: Math.floor(Date.now() / 1000) + 180,
+              amountIn: lpShareWei,
+              amountOutMinimum: 0n,
+              sqrtPriceLimitX96: 0
+            }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
+            await lpTx.wait(1);
+            console.log(`   💧 [${walletKey}] 10% Profit Injected into GMAI Pool: +${gmaiLpSda.toFixed(5)} SDA ➔ GMAI (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
+          } catch (lpErr) {
+            console.warn(`   ⚠️ [${walletKey}] GMAI liquidity injection skipped: ${lpErr.message}`);
+          }
+        }
+      }
+
+      // 2) 5% Profit Injected into BANDIQ Pool (0xB11551A7...)
+      if (BANDIQ_LP_SHARE > 0) {
+        bandiqLpSda = netProfitSda * BANDIQ_LP_SHARE;
+        const lpShareWei = ethers.parseEther(bandiqLpSda.toFixed(18));
+        if (lpShareWei >= 100000000000000n) {
+          try {
+            const nonceLp = await getFastNonce(signer.address);
+            const lpTx = await router.exactInputSingle({
+              tokenIn: WSDA_ADDR,
+              tokenOut: BANDIQ_ADDR,
+              fee: BANDIQ_POOL_FEE,
+              recipient: signer.address,
+              deadline: Math.floor(Date.now() / 1000) + 180,
+              amountIn: lpShareWei,
+              amountOutMinimum: 0n,
+              sqrtPriceLimitX96: 0
+            }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
+            await lpTx.wait(1);
+            console.log(`   💧 [${walletKey}] 5% Profit Injected into BANDIQ Pool: +${bandiqLpSda.toFixed(5)} SDA ➔ BANDIQ (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
+          } catch (lpErr) {
+            console.warn(`   ⚠️ [${walletKey}] BANDIQ liquidity injection skipped: ${lpErr.message}`);
+          }
+        }
+      }
+
+      // 3) 5% Profit Injected into SVM Pool (0x341C9103...)
+      if (SVM_LP_SHARE > 0) {
+        svmLpSda = netProfitSda * SVM_LP_SHARE;
+        const lpShareWei = ethers.parseEther(svmLpSda.toFixed(18));
+        if (lpShareWei >= 100000000000000n) {
+          try {
+            const nonceLp = await getFastNonce(signer.address);
+            const lpTx = await router.exactInputSingle({
+              tokenIn: WSDA_ADDR,
+              tokenOut: SVM_ADDR,
+              fee: SVM_POOL_FEE,
+              recipient: signer.address,
+              deadline: Math.floor(Date.now() / 1000) + 180,
+              amountIn: lpShareWei,
+              amountOutMinimum: 0n,
+              sqrtPriceLimitX96: 0
+            }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
+            await lpTx.wait(1);
+            console.log(`   💧 [${walletKey}] 5% Profit Injected into SVM Pool: +${svmLpSda.toFixed(5)} SDA ➔ SVM (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
+          } catch (lpErr) {
+            console.warn(`   ⚠️ [${walletKey}] SVM liquidity injection skipped: ${lpErr.message}`);
+          }
         }
       }
     }
 
-    // 5. AUTO-UNWRAP EXCESS WSDA PROFITS BEYOND WORKING CAPITAL TARGET (W1-5: 100 WSDA, W6-10: 10 WSDA)
+    const totalLpProfitSda = gmaiLpSda + bandiqLpSda + svmLpSda;
+
+    // 5. AUTO-UNWRAP EXCESS WSDA PROFITS BEYOND WORKING CAPITAL TARGET (W1-5: 100 WSDA, W6-10: 10 WSDA, W11-15: 5 WSDA)
     const wNum = parseInt(walletKey.replace("wallet", ""), 10);
-    const targetWsdaReserve = wNum <= 5 ? 100.0 : 10.0;
+    const targetWsdaReserve = wNum <= 5 ? 100.0 : (wNum <= 10 ? 10.0 : 5.0);
     const reserveWei = ethers.parseEther(targetWsdaReserve.toString());
 
     const curWsdaAfter = await wsda.balanceOf(signer.address);
@@ -516,7 +585,7 @@ async function executeCopyTrade({
       }
     }
 
-    console.log(`   💰 [${walletKey}] Trade Gross: ${grossDelta >= 0 ? "+" : ""}${grossDelta.toFixed(5)} SDA | Gas: -${gasSpentSda.toFixed(5)} SDA | Net Realized: ${netProfitSda >= 0 ? "+" : ""}${netProfitSda.toFixed(5)} SDA | 💧 10% GMAI: +${lpProfitSda.toFixed(5)} SDA`);
+    console.log(`   💰 [${walletKey}] Trade Gross: ${grossDelta >= 0 ? "+" : ""}${grossDelta.toFixed(5)} SDA | Gas: -${gasSpentSda.toFixed(5)} SDA | Net Realized: ${netProfitSda >= 0 ? "+" : ""}${netProfitSda.toFixed(5)} SDA | 💧 Injected 20% (10% GMAI, 5% BANDIQ, 5% SVM): +${totalLpProfitSda.toFixed(5)} SDA`);
 
     return {
       success: true,
