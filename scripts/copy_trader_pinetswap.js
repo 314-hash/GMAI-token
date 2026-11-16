@@ -668,6 +668,7 @@ async function main() {
   let sessionGmaiLpInjectedSda = 0.0;
   let sessionTradesExecuted = 0;
   let sessionWavesCount = 0;
+  let copyWalletIndex = 0;
   let lastHeartbeatTime = Date.now();
   let lastCheckedBlock = await provider.getBlockNumber();
 
@@ -719,20 +720,22 @@ async function main() {
 
                 const parsed = await parsePinetswapTx(tx);
                 if (parsed) {
-                  console.log(`\n🚀 [ALL ${activeKeys.length} WALLETS DISPATCHING AT THE SAME TIME]`);
-                  const copyResults = await Promise.all(
-                    activeKeys.map((executingKey, idx) => {
-                      const executingSigner = swarmWallets[executingKey];
-                      return executeCopyTrade({
-                        walletKey: executingKey,
-                        signer: executingSigner,
-                        targetTxInfo: parsed,
-                        targetWallet: fromLower,
-                        copyConfig: { isLive, tradeSizeSda, copyProportion, sameTrade, lpShare, minTradeSda, maxTradeSda },
-                        staggerMs: idx * 60
-                      });
-                    })
-                  );
+                  // Round-Robin Rotating Dispatch for Atomic Cross-Pool Scalps
+                  // (Prevents sibling collision where multiple wallets fight for the same liquidity in 1 block)
+                  const rotatingKey = activeKeys[copyWalletIndex % activeKeys.length];
+                  copyWalletIndex++;
+
+                  console.log(`\n🚀 [COORDINATED ROTATING DISPATCH] Assigning trade to [${rotatingKey.toUpperCase()}] (Zero-Collision Protection)`);
+                  const executingSigner = swarmWallets[rotatingKey];
+                  const r = await executeCopyTrade({
+                    walletKey: rotatingKey,
+                    signer: executingSigner,
+                    targetTxInfo: parsed,
+                    targetWallet: fromLower,
+                    copyConfig: { isLive, tradeSizeSda, copyProportion, sameTrade, lpShare, minTradeSda, maxTradeSda },
+                    staggerMs: 0
+                  });
+                  const copyResults = [r];
 
                   sessionWavesCount++;
                   let waveGross = 0.0;
