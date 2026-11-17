@@ -115,6 +115,135 @@ const approvalCache = new Set();
 const processedTxHashes = new Set();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const POSITIONS_FILE = path.join(__dirname, "..", "data", "copy_positions.json");
+
+function loadPositions() {
+  try {
+    if (fs.existsSync(POSITIONS_FILE)) {
+      return JSON.parse(fs.readFileSync(POSITIONS_FILE, "utf8"));
+    }
+  } catch {}
+  return {};
+}
+
+function savePositions(positions) {
+  try {
+    const dir = path.dirname(POSITIONS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(POSITIONS_FILE, JSON.stringify(positions, null, 2), "utf8");
+  } catch (err) {
+    console.warn("Failed to save positions file:", err.message);
+  }
+}
+
+async function injectEcosystemLiquidity(signer, walletKey, router, netProfitSda) {
+  let totalLp = 0.0;
+  if (netProfitSda <= 0) return totalLp;
+
+  // 1) 10% GMAI
+  if (GMAI_LP_SHARE > 0) {
+    const gmaiSda = netProfitSda * GMAI_LP_SHARE;
+    const lpWei = ethers.parseEther(gmaiSda.toFixed(18));
+    if (lpWei >= 100000000000000n) {
+      try {
+        const nonceLp = await getFastNonce(signer.address);
+        const lpTx = await router.exactInputSingle({
+          tokenIn: WSDA_ADDR,
+          tokenOut: GMAI_ADDR,
+          fee: GMAI_POOL_FEE,
+          recipient: signer.address,
+          deadline: Math.floor(Date.now() / 1000) + 180,
+          amountIn: lpWei,
+          amountOutMinimum: 0n,
+          sqrtPriceLimitX96: 0
+        }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
+        await lpTx.wait(1);
+        totalLp += gmaiSda;
+        console.log(`   💧 [${walletKey}] 10% Profit Injected into GMAI Pool: +${gmaiSda.toFixed(5)} SDA ➔ GMAI (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
+      } catch (lpErr) {
+        console.warn(`   ⚠️ [${walletKey}] GMAI liquidity injection skipped: ${lpErr.message}`);
+      }
+    }
+  }
+
+  // 2) 5% BANDIQ
+  if (BANDIQ_LP_SHARE > 0) {
+    const bandiqSda = netProfitSda * BANDIQ_LP_SHARE;
+    const lpWei = ethers.parseEther(bandiqSda.toFixed(18));
+    if (lpWei >= 100000000000000n) {
+      try {
+        const nonceLp = await getFastNonce(signer.address);
+        const lpTx = await router.exactInputSingle({
+          tokenIn: WSDA_ADDR,
+          tokenOut: BANDIQ_ADDR,
+          fee: BANDIQ_POOL_FEE,
+          recipient: signer.address,
+          deadline: Math.floor(Date.now() / 1000) + 180,
+          amountIn: lpWei,
+          amountOutMinimum: 0n,
+          sqrtPriceLimitX96: 0
+        }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
+        await lpTx.wait(1);
+        totalLp += bandiqSda;
+        console.log(`   💧 [${walletKey}] 5% Profit Injected into BANDIQ Pool: +${bandiqSda.toFixed(5)} SDA ➔ BANDIQ (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
+      } catch (lpErr) {
+        console.warn(`   ⚠️ [${walletKey}] BANDIQ liquidity injection skipped: ${lpErr.message}`);
+      }
+    }
+  }
+
+  // 3) 5% SVM
+  if (SVM_LP_SHARE > 0) {
+    const svmSda = netProfitSda * SVM_LP_SHARE;
+    const lpWei = ethers.parseEther(svmSda.toFixed(18));
+    if (lpWei >= 100000000000000n) {
+      try {
+        const nonceLp = await getFastNonce(signer.address);
+        const lpTx = await router.exactInputSingle({
+          tokenIn: WSDA_ADDR,
+          tokenOut: SVM_ADDR,
+          fee: SVM_POOL_FEE,
+          recipient: signer.address,
+          deadline: Math.floor(Date.now() / 1000) + 180,
+          amountIn: lpWei,
+          amountOutMinimum: 0n,
+          sqrtPriceLimitX96: 0
+        }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
+        await lpTx.wait(1);
+        totalLp += svmSda;
+        console.log(`   💧 [${walletKey}] 5% Profit Injected into SVM Pool: +${svmSda.toFixed(5)} SDA ➔ SVM (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
+      } catch (lpErr) {
+        console.warn(`   ⚠️ [${walletKey}] SVM liquidity injection skipped: ${lpErr.message}`);
+      }
+    }
+  }
+
+  return totalLp;
+}
+
+async function autoUnwrapProfits(signer, walletKey, wsda) {
+  const wNum = parseInt(walletKey.replace("wallet", ""), 10);
+  const targetWsdaReserve = wNum <= 5 ? 100.0 : (wNum <= 10 ? 10.0 : 5.0);
+  const reserveWei = ethers.parseEther(targetWsdaReserve.toString());
+  const curWsdaAfter = await wsda.balanceOf(signer.address);
+
+  if (curWsdaAfter > reserveWei + ethers.parseEther("0.1")) {
+    const excessProfit = curWsdaAfter - reserveWei;
+    try {
+      const nonceUnwrap = await getFastNonce(signer.address);
+      const unwrapTx = await wsda.withdraw(excessProfit, {
+        gasLimit: 80000n,
+        gasPrice: SAFE_GAS_PRICE,
+        nonce: nonceUnwrap
+      });
+      await unwrapTx.wait(1);
+      console.log(`   💰 [${walletKey}] Harvested Profit: Auto-Unwrapped +${ethers.formatEther(excessProfit)} WSDA ➔ Native SDA (Kept ${targetWsdaReserve} WSDA working capital)!`);
+    } catch (unwrapErr) {
+      console.warn(`   ⚠️ [${walletKey}] Auto-unwrap notice: ${unwrapErr.message}`);
+    }
+  }
+}
+
 async function getFastNonce(address) {
   const [latest, pending] = await Promise.all([
     provider.getTransactionCount(address, "latest"),
@@ -334,15 +463,24 @@ async function executeCopyTrade({
     hopsStr.push(h.fee ? `${sym} (Fee ${h.fee})` : sym);
   }
 
+  const isWhaleExit = targetTxInfo.tokenOut && targetTxInfo.tokenOut.toLowerCase() === WSDA_ADDR.toLowerCase() && !targetTxInfo.isRoundTrip;
+  const isWhaleBuy = targetTxInfo.tokenIn && targetTxInfo.tokenIn.toLowerCase() === WSDA_ADDR.toLowerCase() && !targetTxInfo.isRoundTrip;
+
+  let stratType = "⚡ ATOMIC ARBITRAGE ROUND-TRIP";
+  if (isWhaleExit) stratType = "🚪 WHALE EXIT / PROFIT REALIZATION (SELL)";
+  else if (isWhaleBuy) stratType = "💎 DIRECTIONAL WHALE COPY (BUY & HOLD)";
+
   console.log(`\n==========================================================================`);
   console.log(`🚨 [COPY TRADE TRIGGERED] Following Target: ${targetWallet.slice(0, 10)}...`);
   console.log(`==========================================================================`);
   console.log(`   Executing Wallet    : [${walletKey.toUpperCase()}] ${signer.address}`);
-  console.log(`   Strategy Type       : ${targetTxInfo.isRoundTrip ? "⚡ ATOMIC ARBITRAGE ROUND-TRIP" : "🌊 DIRECTIONAL SWAP"}`);
+  console.log(`   Strategy Type       : ${stratType}`);
   console.log(`   Target Swap Path    : ${hopsStr.join(" ➔ ")}`);
   console.log(`   Target Amount       : ${targetTxInfo.amountInSda.toFixed(4)} SDA`);
-  console.log(`   User Copy Deploy    : ${userAmountSda.toFixed(4)} SDA (Min: ${minTradeSda.toFixed(1)}, Max: ${maxTradeSda.toFixed(1)})`);
-  console.log(`   Protection Guard    : 100% Guaranteed On-Chain (0 SDA lost, 0 tokens held)`);
+  if (!isWhaleExit) {
+    console.log(`   User Copy Deploy    : ${userAmountSda.toFixed(4)} SDA (Min: ${minTradeSda.toFixed(1)}, Max: ${maxTradeSda.toFixed(1)})`);
+  }
+  console.log(`   Holding Mode        : 🔒 Wallets 1-5 Hold Tokens Based on Top Trader Decisions`);
   console.log(`--------------------------------------------------------------------------`);
 
   // STRICT INVARIANT: If this trade attempts to sell personal holdings (GMAI, RIDE, SVM, etc.), abort!
@@ -354,253 +492,412 @@ async function executeCopyTrade({
     }
   }
 
-  // STRICT ZERO-HOLDING INVARIANT CHECK (BEFORE WRAPPING OR BALANCE CHECKS):
-  // We must NEVER hold tokens in user wallets. Pure scalping & round-trip arbitrage only.
-  // If target trade is a round-trip (WSDA -> ... -> WSDA), verify and copy.
-  // If target trade is a directional buy (WSDA -> Token), test if an immediate profitable cross-pool exit exists back to WSDA.
-  // If target trade is NOT starting from WSDA, skip immediately without any gas spent or wrapping!
-  const deadline = Math.floor(Date.now() / 1000) + 120;
-  let executionPath = targetTxInfo.path;
-  let isExecutableRoundTrip = targetTxInfo.isRoundTrip;
+  const deadline = Math.floor(Date.now() / 1000) + 180;
 
-  if (!isExecutableRoundTrip) {
-    if (targetTxInfo.tokenIn && targetTxInfo.tokenIn.toLowerCase() === WSDA_ADDR.toLowerCase()) {
-      const token = targetTxInfo.tokenOut;
-      const buyFee = targetTxInfo.fee || 3000;
-      const candidateFees = [500, 3000, 10000].filter(f => f !== buyFee);
-      let bestCrossRoute = null;
+  // =========================================================================
+  // BRANCH 1: WHALE EXIT (Target is dumping a token back to WSDA)
+  // Wallets 1-5 sell their held tokens, realize profit, inject 20% into pools!
+  // =========================================================================
+  if (isWhaleExit) {
+    const tokenToSell = targetTxInfo.tokenIn;
+    const symToSell = await resolveTokenSymbol(tokenToSell);
+    const tokenContract = new ethers.Contract(tokenToSell, ERC20_ABI, signer);
+    const heldBalance = await tokenContract.balanceOf(signer.address);
 
-      for (const sellFee of candidateFees) {
-        const candidatePath = ethers.solidityPacked(
-          ["address", "uint24", "address", "uint24", "address"],
-          [WSDA_ADDR, buyFee, token, sellFee, WSDA_ADDR]
-        );
-        try {
-          const out = await router.exactInput.staticCall({
-            path: candidatePath,
-            recipient: signer.address,
-            deadline,
-            amountIn: userAmountWei,
-            amountOutMinimum: userAmountWei + 1n
-          });
-          const netOut = Number(ethers.formatEther(out - userAmountWei));
-          if (netOut > 0 && (!bestCrossRoute || netOut > bestCrossRoute.netOut)) {
-            bestCrossRoute = { path: candidatePath, netOut, sellFee };
-          }
-        } catch {}
-      }
-
-      if (bestCrossRoute) {
-        console.log(`   ⚡ [CROSS-POOL SCALP FOUND] Target buy in pool ${buyFee} enables profitable exit in pool ${bestCrossRoute.sellFee} (+${bestCrossRoute.netOut.toFixed(5)} SDA Net)!`);
-        executionPath = bestCrossRoute.path;
-        isExecutableRoundTrip = true;
-      } else {
-        console.log(`   🛡️ [PURE SCALPING GUARD] Target is performing a directional buy without an immediate cross-pool exit back to WSDA.`);
-        console.log(`   🚫 Aborting copy-trade to guarantee 0 TOKENS HELD & 100% SDA LIQUIDITY.`);
-        return { success: false, reason: "DIRECTIONAL_TRADE_SKIPPED_ZERO_HOLDINGS" };
-      }
-    } else {
-      console.log(`   🛡️ [PURE SCALPING GUARD] Target is trading non-WSDA input asset (${targetTxInfo.tokenIn?.slice(0, 10) || "Unknown"}). Skipping trade to guarantee 0 tokens held.`);
-      return { success: false, reason: "NON_WSDA_INPUT_SKIPPED" };
-    }
-  }
-
-  if (!isLive) {
-    const simGross = userAmountSda * 0.0065; // Approx realistic simulation spread (+0.65%)
-    const simGas = 0.00072;
-    const simNet = simGross - simGas;
-    const simLp = simNet * (copyConfig.lpShare ?? DEFAULT_LP_SHARE);
-    console.log(`   🛡️ [DRY-RUN SIMULATION] Verified copy-trade simulation for ${walletKey}!`);
-    console.log(`      • Simulated Gross Delta : +${simGross.toFixed(5)} SDA`);
-    console.log(`      • Simulated Net Profit  : +${simNet.toFixed(5)} SDA`);
-    console.log(`      • 💧 10% GMAI Liquidity : +${simLp.toFixed(5)} SDA`);
-    return { success: true, simulated: true, userAmountSda, grossDelta: simGross, gasSpentSda: simGas, netProfitSda: simNet, lpProfitSda: simLp };
-  }
-
-  // 1. Ensure user wallet has sufficient WSDA now that we know trade is executable
-  let freshWsda = await wsda.balanceOf(signer.address);
-  if (freshWsda < userAmountWei) {
-    const wrapNeeded = userAmountWei - freshWsda;
-    const freshNative = await provider.getBalance(signer.address);
-    if (freshNative < wrapNeeded + ethers.parseEther("0.05")) {
-      console.warn(`   ⚠️ [${walletKey}] Insufficient native balance to fund copy trade (${ethers.formatEther(freshNative)} SDA).`);
-      return { success: false, reason: "LOW_NATIVE_BALANCE" };
-    }
-    const nonceWrap = await getFastNonce(signer.address);
-    const wrapTx = await wsda.deposit({ value: wrapNeeded, gasLimit: 90000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceWrap });
-    await wrapTx.wait(1);
-    console.log(`   ✅ [${walletKey}] Funded WSDA: Wrapped +${ethers.formatEther(wrapNeeded)} SDA ➔ WSDA`);
-  }
-
-  // 2. Ensure Router Approval
-  await ensureFastApproval(signer, WSDA_ADDR, userAmountWei);
-
-  // 3. Pre-flight On-Chain StaticCall
-  try {
-    const liveOut = await router.exactInput.staticCall({
-      path: executionPath,
-      recipient: signer.address,
-      deadline,
-      amountIn: userAmountWei,
-      amountOutMinimum: userAmountWei + 1n // Infallible: Must return strictly > input
-    });
-    const netSda = Number(ethers.formatEther(liveOut - userAmountWei));
-    console.log(`   🛡️ [STATIC-CALL VERIFIED] On-chain simulation yields +${netSda.toFixed(5)} SDA Net Profit!`);
-  } catch (simErr) {
-    console.log(`   🛡️ [STATIC-CALL GUARD] Opportunity already balanced or slippage exceeded. Aborting copy trade with 0 gas spent!`);
-    return { success: false, reason: "SIMULATION_REJECTED" };
-  }
-
-  // 4. Broadcast Copy Transaction with Cross-Window Lock
-  const wsdaBefore = await wsda.balanceOf(signer.address);
-  let copyTx;
-  const lock = await acquireWalletLock(walletKey, signer.address, provider, 5000);
-  try {
-    const nonce = lock.nonce;
-
-    copyTx = await router.exactInput({
-      path: executionPath,
-      recipient: signer.address,
-      deadline,
-      amountIn: userAmountWei,
-      amountOutMinimum: userAmountWei + 1n // 100% Guaranteed: Never receive less than input
-    }, {
-      gasLimit: 360000n,
-      gasPrice: SAFE_GAS_PRICE,
-      nonce
-    });
-
-    console.log(`   🚀 Copy Trade Broadcasted! Tx: ${copyTx.hash}`);
-    const receipt = await copyTx.wait(1);
-    console.log(`   ✅ Confirmed in block ${receipt.blockNumber}! (Gas: ${receipt.gasUsed})`);
-
-    const wsdaAfter = await wsda.balanceOf(signer.address);
-    const grossDelta = Number(ethers.formatEther(wsdaAfter - wsdaBefore));
-    const gasSpentWei = BigInt(receipt.gasUsed) * SAFE_GAS_PRICE;
-    const gasSpentSda = Number(ethers.formatEther(gasSpentWei));
-    const netProfitSda = grossDelta - gasSpentSda;
-
-    let gmaiLpSda = 0.0;
-    let bandiqLpSda = 0.0;
-    let svmLpSda = 0.0;
-
-    if (netProfitSda > 0) {
-      // 1) 10% Profit Injected into GMAI Pool
-      if (GMAI_LP_SHARE > 0) {
-        gmaiLpSda = netProfitSda * GMAI_LP_SHARE;
-        const lpShareWei = ethers.parseEther(gmaiLpSda.toFixed(18));
-        if (lpShareWei >= 100000000000000n) {
-          try {
-            const nonceLp = await getFastNonce(signer.address);
-            const lpTx = await router.exactInputSingle({
-              tokenIn: WSDA_ADDR,
-              tokenOut: GMAI_ADDR,
-              fee: GMAI_POOL_FEE,
-              recipient: signer.address,
-              deadline: Math.floor(Date.now() / 1000) + 180,
-              amountIn: lpShareWei,
-              amountOutMinimum: 0n,
-              sqrtPriceLimitX96: 0
-            }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
-            await lpTx.wait(1);
-            console.log(`   💧 [${walletKey}] 10% Profit Injected into GMAI Pool: +${gmaiLpSda.toFixed(5)} SDA ➔ GMAI (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
-          } catch (lpErr) {
-            console.warn(`   ⚠️ [${walletKey}] GMAI liquidity injection skipped: ${lpErr.message}`);
-          }
-        }
-      }
-
-      // 2) 5% Profit Injected into BANDIQ Pool (0xB11551A7...)
-      if (BANDIQ_LP_SHARE > 0) {
-        bandiqLpSda = netProfitSda * BANDIQ_LP_SHARE;
-        const lpShareWei = ethers.parseEther(bandiqLpSda.toFixed(18));
-        if (lpShareWei >= 100000000000000n) {
-          try {
-            const nonceLp = await getFastNonce(signer.address);
-            const lpTx = await router.exactInputSingle({
-              tokenIn: WSDA_ADDR,
-              tokenOut: BANDIQ_ADDR,
-              fee: BANDIQ_POOL_FEE,
-              recipient: signer.address,
-              deadline: Math.floor(Date.now() / 1000) + 180,
-              amountIn: lpShareWei,
-              amountOutMinimum: 0n,
-              sqrtPriceLimitX96: 0
-            }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
-            await lpTx.wait(1);
-            console.log(`   💧 [${walletKey}] 5% Profit Injected into BANDIQ Pool: +${bandiqLpSda.toFixed(5)} SDA ➔ BANDIQ (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
-          } catch (lpErr) {
-            console.warn(`   ⚠️ [${walletKey}] BANDIQ liquidity injection skipped: ${lpErr.message}`);
-          }
-        }
-      }
-
-      // 3) 5% Profit Injected into SVM Pool (0x341C9103...)
-      if (SVM_LP_SHARE > 0) {
-        svmLpSda = netProfitSda * SVM_LP_SHARE;
-        const lpShareWei = ethers.parseEther(svmLpSda.toFixed(18));
-        if (lpShareWei >= 100000000000000n) {
-          try {
-            const nonceLp = await getFastNonce(signer.address);
-            const lpTx = await router.exactInputSingle({
-              tokenIn: WSDA_ADDR,
-              tokenOut: SVM_ADDR,
-              fee: SVM_POOL_FEE,
-              recipient: signer.address,
-              deadline: Math.floor(Date.now() / 1000) + 180,
-              amountIn: lpShareWei,
-              amountOutMinimum: 0n,
-              sqrtPriceLimitX96: 0
-            }, { gasLimit: 260000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceLp });
-            await lpTx.wait(1);
-            console.log(`   💧 [${walletKey}] 5% Profit Injected into SVM Pool: +${svmLpSda.toFixed(5)} SDA ➔ SVM (Tx: https://ledger.sidrachain.com/tx/${lpTx.hash})`);
-          } catch (lpErr) {
-            console.warn(`   ⚠️ [${walletKey}] SVM liquidity injection skipped: ${lpErr.message}`);
-          }
-        }
-      }
+    if (heldBalance === 0n) {
+      console.log(`   🛡️ [HOLDING MONITOR] Whale sold ${symToSell}, but [${walletKey.toUpperCase()}] holds 0 ${symToSell}. Skipping.`);
+      return { success: false, reason: "NO_TOKENS_HELD" };
     }
 
-    const totalLpProfitSda = gmaiLpSda + bandiqLpSda + svmLpSda;
+    const positions = loadPositions();
+    const pos = positions[walletKey]?.[tokenToSell.toLowerCase()];
+    const costBasisSda = pos ? (pos.costWsda || 0) : 0;
 
-    // 5. AUTO-UNWRAP EXCESS WSDA PROFITS BEYOND WORKING CAPITAL TARGET (W1-5: 100 WSDA, W6-10: 10 WSDA, W11-15: 5 WSDA)
-    const wNum = parseInt(walletKey.replace("wallet", ""), 10);
-    const targetWsdaReserve = wNum <= 5 ? 100.0 : (wNum <= 10 ? 10.0 : 5.0);
-    const reserveWei = ethers.parseEther(targetWsdaReserve.toString());
+    console.log(`   🎯 [POSITION EXIT] [${walletKey.toUpperCase()}] Holding ${ethers.formatEther(heldBalance)} ${symToSell} (Cost Basis: ${costBasisSda.toFixed(4)} WSDA)`);
+    console.log(`   Selling token back to WSDA following Whale Decision...`);
 
-    const curWsdaAfter = await wsda.balanceOf(signer.address);
-    if (curWsdaAfter > reserveWei + ethers.parseEther("0.1")) {
-      const excessProfit = curWsdaAfter - reserveWei;
+    // Determine optimal fee pool to sell
+    const candidateFees = [targetTxInfo.fee, 500, 3000, 10000].filter(Boolean);
+    let bestFee = targetTxInfo.fee || 3000;
+    let bestOutWei = 0n;
+
+    for (const f of candidateFees) {
       try {
-        const nonceUnwrap = await getFastNonce(signer.address);
-        const unwrapTx = await wsda.withdraw(excessProfit, {
-          gasLimit: 80000n,
-          gasPrice: SAFE_GAS_PRICE,
-          nonce: nonceUnwrap
-        });
-        await unwrapTx.wait(1);
-        console.log(`   💰 [${walletKey}] Harvested Profit: Auto-Unwrapped +${ethers.formatEther(excessProfit)} WSDA ➔ Native SDA (Kept ${targetWsdaReserve} WSDA working capital)!`);
-      } catch (unwrapErr) {
-        console.warn(`   ⚠️ [${walletKey}] Auto-unwrap notice: ${unwrapErr.message}`);
+        const out = await router.exactInputSingle.staticCall({
+          tokenIn: tokenToSell,
+          tokenOut: WSDA_ADDR,
+          fee: f,
+          recipient: signer.address,
+          deadline,
+          amountIn: heldBalance,
+          amountOutMinimum: 0n,
+          sqrtPriceLimitX96: 0
+        }, { from: signer.address });
+        if (out > bestOutWei) {
+          bestOutWei = out;
+          bestFee = f;
+        }
+      } catch {}
+    }
+
+    if (bestOutWei === 0n) {
+      console.warn(`   ⚠️ [${walletKey}] No liquid pool route found to exit ${symToSell} back to WSDA.`);
+      return { success: false, reason: "NO_LIQUIDITY_TO_EXIT" };
+    }
+
+    const expectedProceedsSda = Number(ethers.formatEther(bestOutWei));
+    console.log(`   🛡️ [PRE-FLIGHT] Best pool fee: ${bestFee} | Expected Proceeds: +${expectedProceedsSda.toFixed(5)} WSDA`);
+
+    if (!isLive) {
+      console.log(`   🛡️ [DRY-RUN SIMULATION] Simulated exit of ${symToSell} for +${expectedProceedsSda.toFixed(5)} WSDA`);
+      return { success: true, simulated: true, isPositionClosed: true, grossDelta: expectedProceedsSda, netProfitSda: expectedProceedsSda - costBasisSda };
+    }
+
+    // Ensure Router Approval for token
+    await ensureFastApproval(signer, tokenToSell, heldBalance);
+
+    const wsdaBefore = await wsda.balanceOf(signer.address);
+    const lock = await acquireWalletLock(walletKey, signer.address, provider, 5000);
+    try {
+      const minProceedsWei = (bestOutWei * 98n) / 100n; // 2% max slippage protection
+      const sellTx = await router.exactInputSingle({
+        tokenIn: tokenToSell,
+        tokenOut: WSDA_ADDR,
+        fee: bestFee,
+        recipient: signer.address,
+        deadline,
+        amountIn: heldBalance,
+        amountOutMinimum: minProceedsWei,
+        sqrtPriceLimitX96: 0
+      }, {
+        gasLimit: 320000n,
+        gasPrice: SAFE_GAS_PRICE,
+        nonce: lock.nonce
+      });
+
+      console.log(`   🚀 Position Exit Broadcasted! Tx: ${sellTx.hash}`);
+      const receipt = await sellTx.wait(1);
+      console.log(`   ✅ Confirmed in block ${receipt.blockNumber}! (Gas: ${receipt.gasUsed})`);
+
+      const wsdaAfter = await wsda.balanceOf(signer.address);
+      const grossProceedsSda = Number(ethers.formatEther(wsdaAfter - wsdaBefore));
+      const gasSpentWei = BigInt(receipt.gasUsed) * SAFE_GAS_PRICE;
+      const gasSpentSda = Number(ethers.formatEther(gasSpentWei));
+      const netProfitSda = costBasisSda > 0 ? (grossProceedsSda - costBasisSda - gasSpentSda) : (grossProceedsSda - gasSpentSda);
+
+      // Multi-Token Flywheel: Inject 20% into pools (10% GMAI, 5% BANDIQ, 5% SVM)
+      let totalLpInjected = 0.0;
+      if (netProfitSda > 0) {
+        totalLpInjected = await injectEcosystemLiquidity(signer, walletKey, router, netProfitSda);
+      }
+
+      // Auto-Unwrap 80% Retained Profit
+      await autoUnwrapProfits(signer, walletKey, wsda);
+
+      // Clear position from storage
+      if (positions[walletKey]?.[tokenToSell.toLowerCase()]) {
+        delete positions[walletKey][tokenToSell.toLowerCase()];
+        savePositions(positions);
+      }
+
+      console.log(`\n🎉 [${walletKey.toUpperCase()} POSITION CLOSED SUCCESSFULLY]`);
+      console.log(`   • Asset Sold        : ${symToSell}`);
+      console.log(`   • WSDA Proceeds     : +${grossProceedsSda.toFixed(5)} WSDA`);
+      console.log(`   • Cost Basis        : ${costBasisSda.toFixed(5)} WSDA`);
+      console.log(`   • Gas Fees Spent    : -${gasSpentSda.toFixed(5)} SDA`);
+      console.log(`   • Net Realized PnL  : ${netProfitSda >= 0 ? "+" : ""}${netProfitSda.toFixed(5)} SDA`);
+      console.log(`   • 💧 20% Ecosystem  : +${totalLpInjected.toFixed(5)} SDA (GMAI, BANDIQ, SVM)`);
+
+      return {
+        success: true,
+        isPositionClosed: true,
+        tokenSold: symToSell,
+        grossDelta: grossProceedsSda,
+        gasSpentSda,
+        netProfitSda,
+        lpProfitSda: totalLpInjected,
+        txHash: sellTx.hash
+      };
+    } catch (err) {
+      console.error(`   ❌ [${walletKey}] Position exit failed: ${err.reason || err.message}`);
+      return { success: false, reason: err.message };
+    } finally {
+      await lock.release();
+    }
+  }
+
+  // =========================================================================
+  // BRANCH 2: WHALE ROUND-TRIP ARBITRAGE (WSDA -> ... -> WSDA)
+  // Execute atomic instant round-trip: 0 tokens held, instant profit!
+  // =========================================================================
+  if (targetTxInfo.isRoundTrip) {
+    if (!isLive) {
+      const simGross = userAmountSda * 0.0065;
+      const simGas = 0.00072;
+      const simNet = simGross - simGas;
+      const simLp = simNet * (copyConfig.lpShare ?? DEFAULT_LP_SHARE);
+      console.log(`   🛡️ [DRY-RUN SIMULATION] Round-trip arbitrage simulation for ${walletKey}!`);
+      return { success: true, simulated: true, isRoundTrip: true, userAmountSda, grossDelta: simGross, gasSpentSda: simGas, netProfitSda: simNet, lpProfitSda: simLp };
+    }
+
+    // Ensure WSDA
+    let freshWsda = await wsda.balanceOf(signer.address);
+    if (freshWsda < userAmountWei) {
+      const wrapNeeded = userAmountWei - freshWsda;
+      const freshNative = await provider.getBalance(signer.address);
+      if (freshNative < wrapNeeded + ethers.parseEther("0.05")) {
+        console.warn(`   ⚠️ [${walletKey}] Insufficient native balance to fund trade.`);
+        return { success: false, reason: "LOW_NATIVE_BALANCE" };
+      }
+      const nonceWrap = await getFastNonce(signer.address);
+      const wrapTx = await wsda.deposit({ value: wrapNeeded, gasLimit: 90000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceWrap });
+      await wrapTx.wait(1);
+    }
+    await ensureFastApproval(signer, WSDA_ADDR, userAmountWei);
+
+    try {
+      const liveOut = await router.exactInput.staticCall({
+        path: targetTxInfo.path,
+        recipient: signer.address,
+        deadline,
+        amountIn: userAmountWei,
+        amountOutMinimum: userAmountWei + 1n
+      }, { from: signer.address });
+      const netSda = Number(ethers.formatEther(liveOut - userAmountWei));
+      console.log(`   🛡️ [STATIC-CALL VERIFIED] Round-trip yields +${netSda.toFixed(5)} SDA Net Profit!`);
+    } catch {
+      console.log(`   🛡️ [STATIC-CALL GUARD] Arbitrage opportunity stale or slippage exceeded. Aborting.`);
+      return { success: false, reason: "SIMULATION_REJECTED" };
+    }
+
+    const wsdaBefore = await wsda.balanceOf(signer.address);
+    const lock = await acquireWalletLock(walletKey, signer.address, provider, 5000);
+    try {
+      const copyTx = await router.exactInput({
+        path: targetTxInfo.path,
+        recipient: signer.address,
+        deadline,
+        amountIn: userAmountWei,
+        amountOutMinimum: userAmountWei + 1n
+      }, { gasLimit: 360000n, gasPrice: SAFE_GAS_PRICE, nonce: lock.nonce });
+
+      console.log(`   🚀 Round-Trip Trade Broadcasted! Tx: ${copyTx.hash}`);
+      const receipt = await copyTx.wait(1);
+      const wsdaAfter = await wsda.balanceOf(signer.address);
+      const grossDelta = Number(ethers.formatEther(wsdaAfter - wsdaBefore));
+      const gasSpentWei = BigInt(receipt.gasUsed) * SAFE_GAS_PRICE;
+      const gasSpentSda = Number(ethers.formatEther(gasSpentWei));
+      const netProfitSda = grossDelta - gasSpentSda;
+
+      let totalLp = 0.0;
+      if (netProfitSda > 0) {
+        totalLp = await injectEcosystemLiquidity(signer, walletKey, router, netProfitSda);
+      }
+      await autoUnwrapProfits(signer, walletKey, wsda);
+
+      return {
+        success: true,
+        isRoundTrip: true,
+        txHash: copyTx.hash,
+        grossDelta,
+        gasSpentSda,
+        netProfitSda,
+        lpProfitSda: totalLp
+      };
+    } catch (err) {
+      console.error(`   ❌ Round-trip trade error: ${err.message}`);
+      return { success: false, reason: err.message };
+    } finally {
+      await lock.release();
+    }
+  }
+
+  // =========================================================================
+  // BRANCH 3: WHALE BUY (WSDA -> Token)
+  // 1) Test for instant cross-pool scalp exit. If profitable -> atomic instant profit!
+  // 2) If no instant exit -> BUY & PATIENTLY HOLD TOKEN BASED ON WHALE DECISION!
+  // =========================================================================
+  if (isWhaleBuy) {
+    const token = targetTxInfo.tokenOut;
+    const tokenSym = await resolveTokenSymbol(token);
+    const buyFee = targetTxInfo.fee || 3000;
+
+    // 1) Test immediate cross-pool scalp
+    const candidateFees = [500, 3000, 10000].filter(f => f !== buyFee);
+    let bestCrossRoute = null;
+
+    for (const sellFee of candidateFees) {
+      const candidatePath = ethers.solidityPacked(
+        ["address", "uint24", "address", "uint24", "address"],
+        [WSDA_ADDR, buyFee, token, sellFee, WSDA_ADDR]
+      );
+      try {
+        const out = await router.exactInput.staticCall({
+          path: candidatePath,
+          recipient: signer.address,
+          deadline,
+          amountIn: userAmountWei,
+          amountOutMinimum: userAmountWei + 1n
+        }, { from: signer.address });
+        const netOut = Number(ethers.formatEther(out - userAmountWei));
+        if (netOut > 0 && (!bestCrossRoute || netOut > bestCrossRoute.netOut)) {
+          bestCrossRoute = { path: candidatePath, netOut, sellFee };
+        }
+      } catch {}
+    }
+
+    if (bestCrossRoute) {
+      console.log(`   ⚡ [CROSS-POOL SCALP FOUND] Target buy in pool ${buyFee} enables instant exit in pool ${bestCrossRoute.sellFee} (+${bestCrossRoute.netOut.toFixed(5)} SDA Net)!`);
+      if (!isLive) {
+        return { success: true, simulated: true, isRoundTrip: true, netProfitSda: bestCrossRoute.netOut, grossDelta: bestCrossRoute.netOut + 0.0005 };
+      }
+      let freshWsda = await wsda.balanceOf(signer.address);
+      if (freshWsda < userAmountWei) {
+        const wrapNeeded = userAmountWei - freshWsda;
+        const freshNative = await provider.getBalance(signer.address);
+        if (freshNative >= wrapNeeded + ethers.parseEther("0.05")) {
+          const nonceWrap = await getFastNonce(signer.address);
+          const wrapTx = await wsda.deposit({ value: wrapNeeded, gasLimit: 90000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceWrap });
+          await wrapTx.wait(1);
+        }
+      }
+      await ensureFastApproval(signer, WSDA_ADDR, userAmountWei);
+      const wsdaBefore = await wsda.balanceOf(signer.address);
+      const lock = await acquireWalletLock(walletKey, signer.address, provider, 5000);
+      try {
+        const scalpTx = await router.exactInput({
+          path: bestCrossRoute.path,
+          recipient: signer.address,
+          deadline,
+          amountIn: userAmountWei,
+          amountOutMinimum: userAmountWei + 1n
+        }, { gasLimit: 360000n, gasPrice: SAFE_GAS_PRICE, nonce: lock.nonce });
+        const receipt = await scalpTx.wait(1);
+        const wsdaAfter = await wsda.balanceOf(signer.address);
+        const grossDelta = Number(ethers.formatEther(wsdaAfter - wsdaBefore));
+        const gasSpentSda = Number(ethers.formatEther(BigInt(receipt.gasUsed) * SAFE_GAS_PRICE));
+        const netProfitSda = grossDelta - gasSpentSda;
+        let totalLp = 0.0;
+        if (netProfitSda > 0) totalLp = await injectEcosystemLiquidity(signer, walletKey, router, netProfitSda);
+        await autoUnwrapProfits(signer, walletKey, wsda);
+        return { success: true, isRoundTrip: true, txHash: scalpTx.hash, grossDelta, gasSpentSda, netProfitSda, lpProfitSda: totalLp };
+      } catch (err) {
+        console.warn(`   ⚠️ Instant scalp failed, falling back to Buy & Hold: ${err.message}`);
+      } finally {
+        await lock.release();
       }
     }
 
-    console.log(`   💰 [${walletKey}] Trade Gross: ${grossDelta >= 0 ? "+" : ""}${grossDelta.toFixed(5)} SDA | Gas: -${gasSpentSda.toFixed(5)} SDA | Net Realized: ${netProfitSda >= 0 ? "+" : ""}${netProfitSda.toFixed(5)} SDA | 💧 Injected 20% (10% GMAI, 5% BANDIQ, 5% SVM): +${totalLpProfitSda.toFixed(5)} SDA`);
+    // 2) NO INSTANT CROSS-POOL EXIT: BUY AND PATIENTLY HOLD BASED ON TOP TRADER DECISION!
+    console.log(`   💎 [BUY & HOLD STRATEGY] Top Trader is accumulating ${tokenSym}.`);
+    console.log(`   [${walletKey.toUpperCase()}] will BUY & HOLD ${tokenSym} until Top Trader closes position!`);
 
-    return {
-      success: true,
-      txHash: copyTx.hash,
-      grossDelta,
-      gasSpentSda,
-      netProfitSda,
-      lpProfitSda
-    };
-  } catch (execErr) {
-    console.error(`   ❌ Copy trade execution notice: ${execErr.reason || execErr.message}`);
-    return { success: false, reason: execErr.message };
-  } finally {
-    await lock.release();
+    if (!isLive) {
+      console.log(`   🛡️ [DRY-RUN SIMULATION] Simulated position opened: Bought ${tokenSym} with ${userAmountSda.toFixed(4)} WSDA (Holding)`);
+      return { success: true, simulated: true, isPositionOpened: true, tokenHeld: tokenSym, costWsda: userAmountSda };
+    }
+
+    // Ensure WSDA
+    let freshWsda = await wsda.balanceOf(signer.address);
+    if (freshWsda < userAmountWei) {
+      const wrapNeeded = userAmountWei - freshWsda;
+      const freshNative = await provider.getBalance(signer.address);
+      if (freshNative < wrapNeeded + ethers.parseEther("0.05")) {
+        console.warn(`   ⚠️ [${walletKey}] Insufficient native balance to fund buy (${ethers.formatEther(freshNative)} SDA).`);
+        return { success: false, reason: "LOW_NATIVE_BALANCE" };
+      }
+      const nonceWrap = await getFastNonce(signer.address);
+      const wrapTx = await wsda.deposit({ value: wrapNeeded, gasLimit: 90000n, gasPrice: SAFE_GAS_PRICE, nonce: nonceWrap });
+      await wrapTx.wait(1);
+    }
+    await ensureFastApproval(signer, WSDA_ADDR, userAmountWei);
+
+    // Pre-flight staticCall for buy
+    let expectedTokensWei = 0n;
+    try {
+      expectedTokensWei = await router.exactInputSingle.staticCall({
+        tokenIn: WSDA_ADDR,
+        tokenOut: token,
+        fee: buyFee,
+        recipient: signer.address,
+        deadline,
+        amountIn: userAmountWei,
+        amountOutMinimum: 0n,
+        sqrtPriceLimitX96: 0
+      }, { from: signer.address });
+      console.log(`   🛡️ [STATIC-CALL VERIFIED] Buy simulation successful (Expected: ${ethers.formatEther(expectedTokensWei)} ${tokenSym})`);
+    } catch (err) {
+      console.warn(`   ⚠️ [${walletKey}] Buy simulation reverted: ${err.reason || err.message}`);
+      return { success: false, reason: "BUY_SIMULATION_FAILED" };
+    }
+
+    const tokenContract = new ethers.Contract(token, ERC20_ABI, signer);
+    const tokenBefore = await tokenContract.balanceOf(signer.address);
+    const lock = await acquireWalletLock(walletKey, signer.address, provider, 5000);
+    try {
+      const minTokensWei = (expectedTokensWei * 97n) / 100n; // 3% max slippage
+      const buyTx = await router.exactInputSingle({
+        tokenIn: WSDA_ADDR,
+        tokenOut: token,
+        fee: buyFee,
+        recipient: signer.address,
+        deadline,
+        amountIn: userAmountWei,
+        amountOutMinimum: minTokensWei,
+        sqrtPriceLimitX96: 0
+      }, {
+        gasLimit: 300000n,
+        gasPrice: SAFE_GAS_PRICE,
+        nonce: lock.nonce
+      });
+
+      console.log(`   🚀 Buy Order Broadcasted! Tx: ${buyTx.hash}`);
+      const receipt = await buyTx.wait(1);
+      console.log(`   ✅ Confirmed in block ${receipt.blockNumber}! (Gas: ${receipt.gasUsed})`);
+
+      const tokenAfter = await tokenContract.balanceOf(signer.address);
+      const tokensAcquired = tokenAfter - tokenBefore;
+
+      // Save position to copy_positions.json
+      const positions = loadPositions();
+      if (!positions[walletKey]) positions[walletKey] = {};
+      positions[walletKey][token.toLowerCase()] = {
+        token,
+        symbol: tokenSym,
+        amountTokensWei: tokensAcquired.toString(),
+        amountTokens: ethers.formatEther(tokensAcquired),
+        costWsda: userAmountSda,
+        buyFee,
+        timestamp: Date.now(),
+        targetWallet,
+        buyTxHash: buyTx.hash
+      };
+      savePositions(positions);
+
+      console.log(`\n💎 [${walletKey.toUpperCase()} POSITION OPENED & HELD]`);
+      console.log(`   • Asset Acquired    : ${tokenSym}`);
+      console.log(`   • Tokens Acquired   : ${ethers.formatEther(tokensAcquired)} ${tokenSym}`);
+      console.log(`   • Cost Basis        : ${userAmountSda.toFixed(4)} WSDA`);
+      console.log(`   • Status            : 🔒 HOLDING PATIENTLY UNTIL TOP TRADER EXITS`);
+      console.log(`   • Tx Hash           : https://ledger.sidrachain.com/tx/${buyTx.hash}`);
+
+      return {
+        success: true,
+        isPositionOpened: true,
+        tokenHeld: tokenSym,
+        costWsda: userAmountSda,
+        txHash: buyTx.hash
+      };
+    } catch (err) {
+      console.error(`   ❌ [${walletKey}] Buy execution error: ${err.reason || err.message}`);
+      return { success: false, reason: err.message };
+    } finally {
+      await lock.release();
+    }
   }
+
+  console.log(`   🛡️ [GUARD] Target transaction involves non-WSDA routing. Skipping to safeguard capital.`);
+  return { success: false, reason: "UNSUPPORTED_ROUTE" };
 }
 
 async function main() {
@@ -720,22 +1017,45 @@ async function main() {
 
                 const parsed = await parsePinetswapTx(tx);
                 if (parsed) {
-                  // Round-Robin Rotating Dispatch for Atomic Cross-Pool Scalps
-                  // (Prevents sibling collision where multiple wallets fight for the same liquidity in 1 block)
-                  const rotatingKey = activeKeys[copyWalletIndex % activeKeys.length];
-                  copyWalletIndex++;
+                  const isWhaleExit = parsed.tokenOut && parsed.tokenOut.toLowerCase() === WSDA_ADDR.toLowerCase() && !parsed.isRoundTrip;
+                  let executingKeys = [];
 
-                  console.log(`\n🚀 [COORDINATED ROTATING DISPATCH] Assigning trade to [${rotatingKey.toUpperCase()}] (Zero-Collision Protection)`);
-                  const executingSigner = swarmWallets[rotatingKey];
-                  const r = await executeCopyTrade({
-                    walletKey: rotatingKey,
-                    signer: executingSigner,
-                    targetTxInfo: parsed,
-                    targetWallet: fromLower,
-                    copyConfig: { isLive, tradeSizeSda, copyProportion, sameTrade, lpShare, minTradeSda, maxTradeSda },
-                    staggerMs: 0
-                  });
-                  const copyResults = [r];
+                  if (isWhaleExit) {
+                    const symIn = await resolveTokenSymbol(parsed.tokenIn);
+                    const tokenContract = new ethers.Contract(parsed.tokenIn, ERC20_ABI, provider);
+                    for (const k of activeKeys) {
+                      try {
+                        const bal = await tokenContract.balanceOf(swarmWallets[k].address);
+                        if (bal > 0n) executingKeys.push(k);
+                      } catch {}
+                    }
+                    if (executingKeys.length === 0) {
+                      console.log(`   ℹ️ [WHALE EXIT DETECTED] Target sold ${symIn}, but Wallets 1-5 hold 0 balance. Skipping exit.`);
+                      continue;
+                    }
+                    console.log(`\n🎯 [WHALE EXIT DETECTED] Target sold ${symIn}! Executing exit across holding fleet wallets: ${executingKeys.join(", ")}`);
+                  } else {
+                    // Whale Buy or Round-Trip:
+                    // Use rotating dispatch across active keys (Wallets 1-5) to prevent pool collision
+                    const rotatingKey = activeKeys[copyWalletIndex % activeKeys.length];
+                    copyWalletIndex++;
+                    executingKeys = [rotatingKey];
+                    console.log(`\n🚀 [COORDINATED ROTATING DISPATCH] Assigning trade to [${rotatingKey.toUpperCase()}] (Zero-Collision Protection)`);
+                  }
+
+                  const copyResults = [];
+                  for (const wKey of executingKeys) {
+                    const executingSigner = swarmWallets[wKey];
+                    const r = await executeCopyTrade({
+                      walletKey: wKey,
+                      signer: executingSigner,
+                      targetTxInfo: parsed,
+                      targetWallet: fromLower,
+                      copyConfig: { isLive, tradeSizeSda, copyProportion, sameTrade, lpShare, minTradeSda, maxTradeSda },
+                      staggerMs: 0
+                    });
+                    if (r) copyResults.push(r);
+                  }
 
                   sessionWavesCount++;
                   let waveGross = 0.0;
@@ -763,7 +1083,7 @@ async function main() {
                   console.log(`\n==========================================================================`);
                   console.log(`📊 LIVE PINETSWAP COPY-TRADING PERFORMANCE DASHBOARD:`);
                   console.log(`==========================================================================`);
-                  console.log(`   • Trades Confirmed in Wave  : ${waveSuccess} / ${activeKeys.length} Fleet Wallets`);
+                  console.log(`   • Trades Confirmed in Wave  : ${waveSuccess} / ${executingKeys.length} Executed Fleet Wallets`);
                   console.log(`   • Wave Gross SDA Profit     : ${waveGross >= 0 ? "+" : ""}${waveGross.toFixed(5)} SDA`);
                   console.log(`   • Wave Gas Fees Spent       : -${waveGas.toFixed(5)} SDA`);
                   console.log(`   • Wave Net Realized Profit  : ${waveNet >= 0 ? "+" : ""}${waveNet.toFixed(5)} SDA`);
@@ -792,7 +1112,15 @@ async function main() {
       // Periodic Status Heartbeat (every 60s)
       if (Date.now() - lastHeartbeatTime >= 60000) {
         lastHeartbeatTime = Date.now();
-        console.log(`⏳ [HEARTBEAT] Block ${currentBlock} | Active Targets: ${TARGET_WALLETS.length} | Fleet: ${activeKeys.length} Wallets | Total Gross Profit: ${sessionGrossProfitSda >= 0 ? "+" : ""}${sessionGrossProfitSda.toFixed(5)} SDA (${sessionTradesExecuted} trades)`);
+        const positions = loadPositions();
+        const openList = [];
+        for (const [wKey, tokenMap] of Object.entries(positions)) {
+          for (const [tAddr, p] of Object.entries(tokenMap)) {
+            openList.push(`[${wKey.toUpperCase()}]: ${p.symbol || tAddr.slice(0, 6)} (${p.costWsda} WSDA)`);
+          }
+        }
+        const posStr = openList.length > 0 ? `| 💎 Open Positions Held: ${openList.join(", ")}` : `| 💎 0 Open Positions (100% Liquid Capital)`;
+        console.log(`⏳ [HEARTBEAT] Block ${currentBlock} | Active Targets: ${TARGET_WALLETS.length} | Fleet: ${activeKeys.join(", ")} ${posStr} | Total Profit: ${sessionGrossProfitSda >= 0 ? "+" : ""}${sessionGrossProfitSda.toFixed(5)} SDA (${sessionTradesExecuted} trades)`);
       }
     } catch (err) {
       // Silently retry on transient RPC hiccups
